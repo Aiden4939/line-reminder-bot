@@ -1,0 +1,29 @@
+import { pool } from "./pool.js";
+
+export async function ensureSchema(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reminders (
+      id              SERIAL PRIMARY KEY,
+      source_type     TEXT NOT NULL CHECK (source_type IN ('user', 'group', 'room')),
+      source_id       TEXT NOT NULL,
+      user_id         TEXT NOT NULL,
+      message         TEXT NOT NULL,
+      remind_at       TIMESTAMPTZ NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending', 'processing', 'sent', 'cancelled', 'failed')),
+      error_message   TEXT,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reminders_due
+      ON reminders (status, remind_at)
+      WHERE status = 'pending';
+  `);
+
+  await pool.query(`
+    ALTER TABLE reminders DROP CONSTRAINT IF EXISTS reminders_status_check;
+    ALTER TABLE reminders ADD CONSTRAINT reminders_status_check
+      CHECK (status IN ('pending', 'processing', 'sent', 'cancelled', 'failed'));
+  `);
+}
