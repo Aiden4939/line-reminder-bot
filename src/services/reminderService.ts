@@ -2,14 +2,42 @@ import * as reminderRepository from "../repositories/reminderRepository.js";
 import type { Reminder } from "../types/reminder.js";
 import type { MessageContext } from "../types/reminder.js";
 import { formatDateTime } from "../utils/dateParser.js";
+import {
+  computeFirstRemindAt,
+  formatRecurrenceSchedule,
+  formatRecurrenceTypeLabel,
+  type RecurrenceRule,
+} from "../utils/recurrence.js";
 import { HELP_MESSAGE, parseCommand } from "./commandParser.js";
 import * as lineService from "./lineService.js";
 
 const MAX_LIST_ITEMS_PER_MESSAGE = 10;
 
-type ReminderListItem = Pick<Reminder, "id" | "remindAt" | "message">;
+type ReminderListItem = Pick<
+  Reminder,
+  | "id"
+  | "remindAt"
+  | "message"
+  | "recurrenceType"
+  | "recurrenceTime"
+  | "recurrenceWeekday"
+  | "recurrenceDayOfMonth"
+>;
+
+function formatListLine(reminder: ReminderListItem): string {
+  const schedule = formatRecurrenceSchedule(reminder);
+  if (schedule) {
+    return `#${reminder.id} | ${schedule} | ${reminder.message}（下次：${formatDateTime(reminder.remindAt)}）`;
+  }
+  return `#${reminder.id} | ${formatDateTime(reminder.remindAt)} | ${reminder.message}`;
+}
 
 export function buildCreateSuccessMessage(reminder: ReminderListItem): string {
+  const schedule = formatRecurrenceSchedule(reminder);
+  if (schedule) {
+    const typeLabel = formatRecurrenceTypeLabel(reminder.recurrenceType);
+    return `已建立${typeLabel}提醒 #${reminder.id}，首次於 ${formatDateTime(reminder.remindAt)}，之後${schedule} 重複：${reminder.message}\n可輸入「查詢提醒」查看，或「取消提醒 ${reminder.id}」取消。`;
+  }
   return `已建立提醒 #${reminder.id}，將於 ${formatDateTime(reminder.remindAt)} 提醒您：${reminder.message}\n可輸入「查詢提醒」查看，或「取消提醒 ${reminder.id}」取消。`;
 }
 
@@ -28,9 +56,7 @@ export function buildReminderListMessages(
       chunks.length === 1
         ? `待發送提醒（共 ${reminders.length} 筆）：`
         : `待發送提醒（第 ${index + 1}/${chunks.length} 段，共 ${reminders.length} 筆）：`;
-    const lines = group.map(
-      (r) => `#${r.id} | ${formatDateTime(r.remindAt)} | ${r.message}`
-    );
+    const lines = group.map(formatListLine);
     return `${title}\n${lines.join("\n")}`;
   });
 }
@@ -39,8 +65,23 @@ export function buildCancelNotFoundMessage(id: number): string {
   return `找不到可取消的提醒 #${id}，請先輸入「查詢提醒」確認 ID 是否存在且狀態為待發送。`;
 }
 
+export function buildCancelSuccessMessage(reminder: ReminderListItem): string {
+  const typeLabel = formatRecurrenceTypeLabel(reminder.recurrenceType);
+  if (typeLabel) {
+    return `已取消${typeLabel}提醒 #${reminder.id}。`;
+  }
+  return `已取消提醒 #${reminder.id}。`;
+}
+
 export function buildHelpMessage(
-  reason?: "invalid_datetime_format" | "missing_message" | "invalid_cancel_id"
+  reason?:
+    | "invalid_datetime_format"
+    | "missing_message"
+    | "invalid_cancel_id"
+    | "invalid_recurring_time_format"
+    | "invalid_weekday"
+    | "invalid_day_of_month"
+    | "missing_recurring_message"
 ): string {
   if (reason === "invalid_datetime_format") {
     return "時間格式錯誤，請用：提醒我 YYYY-MM-DD HH:mm 內容\n例如：提醒我 2026-06-20 09:30 開會";
@@ -50,6 +91,18 @@ export function buildHelpMessage(
   }
   if (reason === "invalid_cancel_id") {
     return "取消提醒的 ID 必須是數字。\n例如：取消提醒 12";
+  }
+  if (reason === "invalid_recurring_time_format") {
+    return "重複提醒時間格式錯誤，請用 HH:mm。\n例如：每天 09:00 喝水";
+  }
+  if (reason === "invalid_weekday") {
+    return "每週提醒的星期格式錯誤。\n例如：每週一 09:00 開會";
+  }
+  if (reason === "invalid_day_of_month") {
+    return "每月提醒的日期必須是 1-31。\n例如：每月15日 09:00 繳費";
+  }
+  if (reason === "missing_recurring_message") {
+    return "請補上提醒內容。\n例如：每天 09:00 喝水";
   }
   return HELP_MESSAGE;
 }
@@ -76,6 +129,41 @@ export async function handleTextMessage(
         userId: context.userId,
         message: command.message,
         remindAt: command.remindAt,
+      });
+
+      await lineService.replyMessage(
+        context.replyToken,
+        buildCreateSuccessMessage(reminder)
+      );
+      return;
+    }
+
+    case "createRecurring": {
+      const rule: RecurrenceRule = {
+        recurrenceType: command.recurrenceType,
+        time: command.time,
+        weekday: command.weekday,
+        dayOfMonth: command.dayOfMonth,
+      };
+      const remindAt = computeFirstRemindAt(new Date(), rule);
+      if (remindAt <= new Date()) {
+        await lineService.replyMessage(
+          context.replyToken,
+          "提醒時間必須晚於現在，請重新輸入。"
+        );
+        return;
+      }
+
+      const reminder = await reminderRepository.createReminder({
+        sourceType: context.sourceType,
+        sourceId: context.sourceId,
+        userId: context.userId,
+        message: command.message,
+        remindAt,
+        recurrenceType: command.recurrenceType,
+        recurrenceTime: command.time,
+        recurrenceWeekday: command.weekday ?? null,
+        recurrenceDayOfMonth: command.dayOfMonth ?? null,
       });
 
       await lineService.replyMessage(
@@ -120,7 +208,7 @@ export async function handleTextMessage(
 
       await lineService.replyMessage(
         context.replyToken,
-        `已取消提醒 #${cancelled.id}。`
+        buildCancelSuccessMessage(cancelled)
       );
       return;
     }

@@ -12,6 +12,10 @@ interface ReminderRow {
   user_id: string;
   message: string;
   remind_at: Date;
+  recurrence_type: Reminder["recurrenceType"];
+  recurrence_time: string | null;
+  recurrence_weekday: number | null;
+  recurrence_day_of_month: number | null;
   status: Reminder["status"];
   error_message: string | null;
   created_at: Date;
@@ -26,6 +30,10 @@ function mapRow(row: ReminderRow): Reminder {
     userId: row.user_id,
     message: row.message,
     remindAt: row.remind_at,
+    recurrenceType: row.recurrence_type ?? "none",
+    recurrenceTime: row.recurrence_time,
+    recurrenceWeekday: row.recurrence_weekday,
+    recurrenceDayOfMonth: row.recurrence_day_of_month,
     status: row.status,
     errorMessage: row.error_message,
     createdAt: row.created_at,
@@ -37,8 +45,11 @@ export async function createReminder(
   input: CreateReminderInput
 ): Promise<Reminder> {
   const result = await pool.query<ReminderRow>(
-    `INSERT INTO reminders (source_type, source_id, user_id, message, remind_at)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO reminders (
+       source_type, source_id, user_id, message, remind_at,
+       recurrence_type, recurrence_time, recurrence_weekday, recurrence_day_of_month
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       input.sourceType,
@@ -46,6 +57,10 @@ export async function createReminder(
       input.userId,
       input.message,
       input.remindAt,
+      input.recurrenceType ?? "none",
+      input.recurrenceTime ?? null,
+      input.recurrenceWeekday ?? null,
+      input.recurrenceDayOfMonth ?? null,
     ]
   );
   return mapRow(result.rows[0]);
@@ -108,6 +123,18 @@ export async function markSent(id: number): Promise<void> {
      SET status = 'sent', updated_at = now(), error_message = NULL
      WHERE id = $1 AND status = 'processing'`,
     [id]
+  );
+}
+
+export async function markRecurringNext(
+  id: number,
+  nextRemindAt: Date
+): Promise<void> {
+  await pool.query(
+    `UPDATE reminders
+     SET status = 'pending', remind_at = $2, updated_at = now(), error_message = NULL
+     WHERE id = $1 AND status = 'processing'`,
+    [id, nextRemindAt]
   );
 }
 

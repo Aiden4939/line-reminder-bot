@@ -26,4 +26,21 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE reminders ADD CONSTRAINT reminders_status_check
       CHECK (status IN ('pending', 'processing', 'sent', 'cancelled', 'failed'));
   `);
+
+  await pool.query(`
+    ALTER TABLE reminders
+      ADD COLUMN IF NOT EXISTS recurrence_type TEXT NOT NULL DEFAULT 'none';
+    ALTER TABLE reminders
+      ADD COLUMN IF NOT EXISTS recurrence_time TEXT;
+    ALTER TABLE reminders
+      ADD COLUMN IF NOT EXISTS recurrence_weekday SMALLINT;
+    ALTER TABLE reminders
+      ADD COLUMN IF NOT EXISTS recurrence_day_of_month SMALLINT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE reminders DROP CONSTRAINT IF EXISTS reminders_recurrence_type_check;
+    ALTER TABLE reminders ADD CONSTRAINT reminders_recurrence_type_check
+      CHECK (recurrence_type IN ('none', 'daily', 'weekly', 'monthly'));
+  `);
 }

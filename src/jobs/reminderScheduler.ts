@@ -3,6 +3,11 @@ import { env } from "../config/env.js";
 import * as reminderRepository from "../repositories/reminderRepository.js";
 import * as lineService from "../services/lineService.js";
 import { formatDateTime } from "../utils/dateParser.js";
+import {
+  computeNextRemindAt,
+  formatRecurrenceTypeLabel,
+  toRecurrenceRule,
+} from "../utils/recurrence.js";
 
 let task: cron.ScheduledTask | null = null;
 
@@ -16,7 +21,9 @@ async function processDueReminders(): Promise<void> {
       continue;
     }
 
-    const pushText = `提醒時間到！\n#${claimed.id} | ${formatDateTime(claimed.remindAt)}\n${claimed.message}`;
+    const recurrenceLabel = formatRecurrenceTypeLabel(claimed.recurrenceType);
+    const recurrenceSuffix = recurrenceLabel ? `（${recurrenceLabel}重複）` : "";
+    const pushText = `提醒時間到！${recurrenceSuffix}\n#${claimed.id} | ${formatDateTime(claimed.remindAt)}\n${claimed.message}`;
 
     try {
       await lineService.pushReminder(
@@ -24,8 +31,18 @@ async function processDueReminders(): Promise<void> {
         claimed.sourceId,
         pushText
       );
-      await reminderRepository.markSent(claimed.id);
-      console.log(`[scheduler] Sent reminder #${claimed.id}`);
+
+      const rule = toRecurrenceRule(claimed);
+      if (rule) {
+        const nextRemindAt = computeNextRemindAt(claimed.remindAt, rule);
+        await reminderRepository.markRecurringNext(claimed.id, nextRemindAt);
+        console.log(
+          `[scheduler] Sent recurring reminder #${claimed.id}, next at ${formatDateTime(nextRemindAt)}`
+        );
+      } else {
+        await reminderRepository.markSent(claimed.id);
+        console.log(`[scheduler] Sent reminder #${claimed.id}`);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       await reminderRepository.markFailed(claimed.id, errorMessage);

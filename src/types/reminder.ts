@@ -7,6 +7,8 @@ export type ReminderStatus =
   | "cancelled"
   | "failed";
 
+export type RecurrenceType = "none" | "daily" | "weekly" | "monthly";
+
 export interface Reminder {
   id: number;
   sourceType: SourceType;
@@ -14,6 +16,10 @@ export interface Reminder {
   userId: string;
   message: string;
   remindAt: Date;
+  recurrenceType: RecurrenceType;
+  recurrenceTime: string | null;
+  recurrenceWeekday: number | null;
+  recurrenceDayOfMonth: number | null;
   status: ReminderStatus;
   errorMessage: string | null;
   createdAt: Date;
@@ -26,6 +32,10 @@ export interface CreateReminderInput {
   userId: string;
   message: string;
   remindAt: Date;
+  recurrenceType?: RecurrenceType;
+  recurrenceTime?: string | null;
+  recurrenceWeekday?: number | null;
+  recurrenceDayOfMonth?: number | null;
 }
 
 export interface MessageContext {
