@@ -38,6 +38,29 @@ export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }
 
+/** 將時間截斷至分鐘（秒與毫秒歸零），與排程每分鐘檢查對齊 */
+export function truncateToMinute(date: Date): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: env.tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+
+  const dateTimeStr = `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
+  const result = parseAbsoluteDateTime(dateTimeStr);
+  if (!result) {
+    throw new Error(`Failed to truncate date: ${dateTimeStr}`);
+  }
+  return result;
+}
+
 export function formatDateTime(date: Date): string {
   return new Intl.DateTimeFormat("zh-TW", {
     timeZone: env.tz,

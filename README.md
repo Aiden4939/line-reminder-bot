@@ -92,7 +92,9 @@ docker compose -f docker-compose.dev.yml down
    - 開啟 **Use webhook**
    - **Webhook URL** 設為你的公開 HTTPS 網址（見下方 ngrok 流程）
    - 點 **Verify** 確認連線成功
-6. 建議關閉 **Auto-reply messages**，避免與 Bot 回覆衝突
+6. 前往 [LINE Official Account Manager](https://manager.line.biz/) → **設定** → **回應設定**：
+   - **回應模式** 設為 **Bot**（關閉 Chat / 聊天）
+   - 關閉 **自動回應訊息**（Auto-reply messages），否則會先收到「感謝您的訊息！很抱歉，本帳號無法個別回覆…」等罐頭訊息，才收到 Bot 回覆
 7. 掃描 **QR code** 加 Bot 為好友（或將 Bot 邀入群組測試）
 
 重啟 app 使 `.env` 生效：

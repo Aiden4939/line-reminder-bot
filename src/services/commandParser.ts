@@ -1,4 +1,8 @@
-import { addMinutes, parseAbsoluteDateTime } from "../utils/dateParser.js";
+import {
+  addMinutes,
+  parseAbsoluteDateTime,
+  truncateToMinute,
+} from "../utils/dateParser.js";
 
 export type ParsedCommand =
   | { type: "create"; remindAt: Date; message: string }
@@ -26,7 +30,7 @@ export function parseCommand(text: string): ParsedCommand {
     }
     return {
       type: "create",
-      remindAt,
+      remindAt: truncateToMinute(remindAt),
       message: absoluteMatch[2].trim(),
     };
   }
@@ -39,7 +43,7 @@ export function parseCommand(text: string): ParsedCommand {
     }
     return {
       type: "create",
-      remindAt: addMinutes(new Date(), minutes),
+      remindAt: truncateToMinute(addMinutes(new Date(), minutes)),
       message: relativeMatch[2].trim(),
     };
   }
