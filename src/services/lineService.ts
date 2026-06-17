@@ -10,9 +10,16 @@ export async function replyMessage(
   replyToken: string,
   text: string
 ): Promise<void> {
+  await replyMessages(replyToken, [text]);
+}
+
+export async function replyMessages(
+  replyToken: string,
+  texts: string[]
+): Promise<void> {
   await client.replyMessage({
     replyToken,
-    messages: [{ type: "text", text }],
+    messages: texts.map((text) => ({ type: "text" as const, text })),
   });
 }
 
