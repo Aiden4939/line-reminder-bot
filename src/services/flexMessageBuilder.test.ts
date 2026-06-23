@@ -29,8 +29,9 @@ test("buildReminderListFlex returns carousel for multiple reminders", () => {
   assert.equal(flex?.contents.type, "carousel");
   if (flex?.contents.type === "carousel") {
     assert.equal(flex.contents.contents.length, 2);
-    const action = flex.contents.contents[0]?.footer?.contents[0]?.action;
-    assert.equal(action?.type, "postback");
+    const button = flex.contents.contents[0]?.footer?.contents[0];
+    assert.ok(button && button.type === "button");
+    assert.equal(button.action.type, "postback");
   }
 });
 

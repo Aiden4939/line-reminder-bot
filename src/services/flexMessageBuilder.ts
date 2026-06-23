@@ -1,4 +1,5 @@
 import type { messagingApi } from "@line/bot-sdk";
+import type { RecurrenceType } from "../types/reminder.js";
 import { formatDateTime } from "../utils/dateParser.js";
 import {
   formatRecurrenceSchedule,
@@ -14,7 +15,7 @@ export interface ReminderFlexItem {
   id: number;
   remindAt: Date;
   message: string;
-  recurrenceType: string;
+  recurrenceType: RecurrenceType;
   recurrenceTime: string | null;
   recurrenceWeekday: number | null;
   recurrenceDayOfMonth: number | null;

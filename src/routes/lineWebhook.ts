@@ -48,21 +48,24 @@ function resolveSource(
 
 async function dispatchEvent(event: WebhookEvent): Promise<void> {
   const source = resolveSource(event);
-  if (!source || !event.replyToken) {
+  if (!source) {
     return;
   }
 
-  const context: MessageContext = {
-    ...source,
-    replyToken: event.replyToken,
-  };
-
   if (event.type === "message" && event.message.type === "text") {
+    const context: MessageContext = {
+      ...source,
+      replyToken: event.replyToken,
+    };
     await handleTextMessage(event.message.text, context);
     return;
   }
 
   if (event.type === "postback") {
+    const context: MessageContext = {
+      ...source,
+      replyToken: event.replyToken,
+    };
     await handlePostback(event.postback.data, context);
   }
 }
