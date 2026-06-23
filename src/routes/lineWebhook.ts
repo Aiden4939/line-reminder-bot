@@ -12,7 +12,7 @@ import { verifyLineSignature } from "../utils/lineSignature.js";
 export const lineWebhookRouter = Router();
 
 const WEBHOOK_ERROR_REPLY =
-  "無法理解您的訊息。時間請用：提醒我 YYYY-MM-DD HH:mm 內容，或自然語言如「明天早上 9 點開會」。";
+  "處理您的訊息時發生錯誤，請稍後重試或輸入「使用說明」查看指令格式。";
 
 function getReplyToken(event: WebhookEvent): string | undefined {
   if (event.type === "message" || event.type === "postback") {

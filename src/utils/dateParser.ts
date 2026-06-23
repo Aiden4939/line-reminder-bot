@@ -102,13 +102,13 @@ export function parseAbsoluteDateTime(dateTimeStr: string): Date | null {
     return null;
   }
 
-  const hour = Number(match[2].slice(0, 2));
-  const minute = Number(match[2].slice(3, 5));
+  const hour = Number(match[2]);
+  const minute = Number(match[3]);
   if (!isValidClock(hour, minute)) {
     return null;
   }
 
-  const isoLocal = `${match[1]}T${match[2]}:00`;
+  const isoLocal = `${match[1]}T${match[2]}:${match[3]}:00`;
   const probe = new Date(`${isoLocal}Z`);
   const offset = getTimezoneOffset(probe, env.tz);
   const date = new Date(`${isoLocal}${offset}`);

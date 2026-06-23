@@ -19,10 +19,18 @@ test("parseAbsoluteDateTime rejects hour 24 and 25", () => {
   assert.equal(parseAbsoluteDateTime("2026-06-24 09:60"), null);
 });
 
-test("parseAbsoluteDateTime accepts valid clock", () => {
+test("parseAbsoluteDateTime accepts valid clock with minutes", () => {
   const parsed = parseAbsoluteDateTime("2026-06-24 09:30");
   assert.ok(parsed);
-  assert.equal(parsed?.getTime(), parsed?.getTime());
+  const truncated = truncateToMinute(parsed!);
+  assert.ok(truncated);
+  const repr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(truncated!);
+  assert.equal(repr, "09:30");
 });
 
 test("truncateToMinute does not throw on valid date", () => {

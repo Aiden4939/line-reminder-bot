@@ -16,7 +16,7 @@ export const env = {
   lineChannelAccessToken: requireEnv("LINE_CHANNEL_ACCESS_TOKEN"),
   openaiApiKey: process.env.OPENAI_API_KEY?.trim() || "",
   llmModel: process.env.LLM_MODEL || "gpt-4o-mini",
-  llmParseTimeoutMs: Number(process.env.LLM_PARSE_TIMEOUT_MS || 30_000),
+  llmParseTimeoutMs: Number(process.env.LLM_PARSE_TIMEOUT_MS || 20_000),
   nluMode: (process.env.NLU_MODE || "hybrid") as "rules" | "hybrid",
   flexListEnabled: process.env.FLEX_LIST_ENABLED !== "false",
   db: {

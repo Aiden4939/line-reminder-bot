@@ -1,7 +1,7 @@
 # 下次對話接手指南（NEXT_SESSION）
 
 > **用途：** 換裝置、新開 Cursor 對話時先讀本檔。  
-> **最後更新：** 2026-06-23  
+> **最後更新：** 2026-06-24  
 > **Repo：** https://github.com/Aiden4939/line-reminder-bot  
 > **Infra：** https://github.com/Aiden4939/inwanding-infra（`line-bot` service）
 
@@ -27,6 +27,16 @@ LINE 提醒 Bot：文字指令建立 / 查詢 / 取消提醒，到期 push 通�
 | **Postback** | webhook 處理 `action=cancel&id=N`、`action=help` | `lineWebhook.ts`, `reminderService.ts` |
 | **無 LIFF** | 依使用者要求，未實作 LIFF | — |
 
+### NLU 靜默失敗修正（`2e337d8` + follow-up）
+
+- **問題**：LLM 回傳 `hour=24`（如 `2026-06-24 24:30`）→ `truncateToMinute` throw → webhook 不回 LINE
+- **修正**：
+  - `parseAbsoluteDateTime` 拒絕 hour≥24、minute≥60；`truncateToMinute` 回傳 `null` 不 throw
+  - `mapLlmPayload` 畸形時間 → `invalid_datetime_format`
+  - webhook catch 用 `replyToken` 回覆（非時間專用誤導文案）
+  - OpenAI client timeout 20s（`LLM_PARSE_TIMEOUT_MS`）
+- **Bugbot review follow-up**：修正 `parseAbsoluteDateTime` 分鐘捕獲 regression（regex 三群組）
+
 ### Bugbot 修正（`98ef23a`）
 
 - 明確 help（使用說明 / 說明 / help）標 `explicit_help`，不進 LLM
@@ -42,10 +52,10 @@ LINE 提醒 Bot：文字指令建立 / 查詢 / 取消提醒，到期 push 通�
 
 | Commit | 說明 |
 |--------|------|
-| `230558f` | Rich Menu + Flex + OpenAI NLU（作者已改 Aiden4939） |
-| `98ef23a` | Bugbot 三項修正 |
-| `eacdd9a` | TS 擋 CI build |
+| `2e337d8` | NLU 畸形 datetime 靜默失敗修復 |
+| `129274e` | NEXT_SESSION 交接文件 |
 | `d42283a` | flex test `RecurrenceType` |
+| `230558f` | Rich Menu + Flex + OpenAI NLU |
 
 ---
 
@@ -53,8 +63,8 @@ LINE 提醒 Bot：文字指令建立 / 查詢 / 取消提醒，到期 push 通�
 
 | 項目 | 狀態 |
 |------|------|
-| GHCR image build | ✅ 通過（`d42283a` 後） |
-| `line-bot` deploy（web-ubuntu） | ✅ 使用者已部署 |
+| GHCR image build | ✅ 通過（待 redeploy `2e337d8` 後最新版） |
+| `line-bot` deploy（web-ubuntu） | ✅ 已部署；**建議 redeploy** 含 NLU 修復版 |
 | **Rich Menu 顯示** | ❌ **需手動跑腳本**（見下方） |
 | **Flex 卡片** | ⚠️ 需「查詢提醒」且有待發送提醒；`FLEX_LIST_ENABLED=true` |
 | **OpenAI 自然語言** | ⚠️ 需主機 `.env` 有 `TELEGRAM_OPENAI_API_KEY`（compose 共用） |
@@ -136,15 +146,25 @@ LLM_PARSE_TIMEOUT_MS=20000
 
 ## H. 建議下一手
 
-1. 主機確認 `TELEGRAM_OPENAI_API_KEY` → redeploy `line-bot` 若需
-2. 跑 `npm run setup-rich-menu` → LINE 底部選單
-3. 測試：建提醒 →「查詢提醒」→ Flex；自然語言「明天早上 9 點開會」
-4. （可選）CI 加 `typecheck` job、infra deploy 加 `git pull`
-5. （可選）每小時重複提醒 — **新需求**，目前不支援
+1. **Redeploy `line-bot`**（含 `2e337d8` NLU 修復）
+2. 主機確認 `TELEGRAM_OPENAI_API_KEY` 有值
+3. 跑 `npm run setup-rich-menu` → LINE 底部選單
+4. 測試：自然語言「明天早上 9 點開會」；畸形時間應回「時間格式錯誤」非靜默
+5. （可選）CI 加 `typecheck` job、infra deploy 加 `git pull`
+6. （可選）每小時重複提醒 — **新需求**，目前不支援
+
+## I. Bugbot review 備註（2026-06-24）
+
+| Finding | 處理 |
+|---------|------|
+| `parseAbsoluteDateTime` 分鐘遺失 | ✅ 已修（match[2]/[3]） |
+| webhook catch 誤導文案 | ✅ 改為通用錯誤訊息 |
+| LLM timeout 30s > replyToken | ✅ 維持 20s 預設 |
+| reply 失敗但 DB 已寫入 | ⚠️ 已知限制，未改商業邏輯 |
 
 ---
 
-## I. 關鍵檔案地圖
+## J. 關鍵檔案地圖
 
 ```
 src/services/commandParser.ts    # 規則解析
@@ -158,6 +178,6 @@ scripts/setup-rich-menu.ts       # Rich Menu（手動）
 
 ---
 
-## J. 新對話開場白（複製貼上）
+## K. 新對話開場白（複製貼上）
 
 > 請先讀 `line-reminder-bot/docs/NEXT_SESSION.md` 和 `inwanding-infra/docs/NEXT_SESSION.md`，我們在 web-ubuntu 已 deploy line-bot，Rich Menu 可能還沒跑 setup-rich-menu。
