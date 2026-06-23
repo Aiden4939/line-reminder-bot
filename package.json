@@ -7,13 +7,15 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "setup-rich-menu": "tsx scripts/setup-rich-menu.ts"
   },
   "dependencies": {
     "@line/bot-sdk": "^9.7.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "node-cron": "^3.0.3",
+    "openai": "^4.77.0",
     "pg": "^8.13.1"
   },
   "devDependencies": {

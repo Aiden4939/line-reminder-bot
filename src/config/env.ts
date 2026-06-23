@@ -14,6 +14,10 @@ export const env = {
   tz: process.env.TZ || "Asia/Taipei",
   lineChannelSecret: requireEnv("LINE_CHANNEL_SECRET"),
   lineChannelAccessToken: requireEnv("LINE_CHANNEL_ACCESS_TOKEN"),
+  openaiApiKey: process.env.OPENAI_API_KEY?.trim() || "",
+  llmModel: process.env.LLM_MODEL || "gpt-4o-mini",
+  nluMode: (process.env.NLU_MODE || "hybrid") as "rules" | "hybrid",
+  flexListEnabled: process.env.FLEX_LIST_ENABLED !== "false",
   db: {
     host: requireEnv("DB_HOST"),
     port: Number(process.env.DB_PORT || 5432),

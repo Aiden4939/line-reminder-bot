@@ -2,6 +2,8 @@ import { messagingApi } from "@line/bot-sdk";
 import { env } from "../config/env.js";
 import type { SourceType } from "../types/reminder.js";
 
+export type LineMessage = messagingApi.Message;
+
 const client = new messagingApi.MessagingApiClient({
   channelAccessToken: env.lineChannelAccessToken,
 });
@@ -10,16 +12,19 @@ export async function replyMessage(
   replyToken: string,
   text: string
 ): Promise<void> {
-  await replyMessages(replyToken, [text]);
+  await replyMessages(replyToken, [{ type: "text", text }]);
 }
 
 export async function replyMessages(
   replyToken: string,
-  texts: string[]
+  messages: LineMessage[]
 ): Promise<void> {
+  if (messages.length === 0) {
+    return;
+  }
   await client.replyMessage({
     replyToken,
-    messages: texts.map((text) => ({ type: "text" as const, text })),
+    messages: messages.slice(0, 5),
   });
 }
 

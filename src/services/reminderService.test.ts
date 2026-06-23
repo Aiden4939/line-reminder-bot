@@ -31,7 +31,7 @@ test("buildCreateSuccessMessage includes next-step actions", () => {
   const message = buildCreateSuccessMessage(oneShotReminder);
 
   assert.match(message, /已建立提醒 #3/);
-  assert.match(message, /可輸入「查詢提醒」/);
+  assert.match(message, /查詢提醒/);
   assert.match(message, /取消提醒 3/);
 });
 

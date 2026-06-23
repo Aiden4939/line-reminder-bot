@@ -69,6 +69,14 @@ export function parseCommand(text: string): ParsedCommand {
   }
 
   if (
+    trimmed === "使用說明" ||
+    trimmed === "說明" ||
+    trimmed.toLowerCase() === "help"
+  ) {
+    return { type: "help" };
+  }
+
+  if (
     ABSOLUTE_MISSING_MESSAGE_PATTERN.test(trimmed) ||
     RELATIVE_MISSING_MESSAGE_PATTERN.test(trimmed) ||
     DAILY_MISSING_MESSAGE_PATTERN.test(trimmed) ||
@@ -195,8 +203,10 @@ export function parseCommand(text: string): ParsedCommand {
 export const HELP_MESSAGE = `提醒 Bot 使用說明：
 • 提醒我 2026-06-20 09:30 開會
 • 提醒我 10分鐘後 喝水
+• 明天早上 9 點開會（自然語言，需設定 OPENAI_API_KEY）
 • 每天 09:00 喝水（或：每天提醒我 09:00 喝水）
 • 每週一 09:00 開會（或：每週一提醒我 09:00 開會）
 • 每月15日 09:00 繳費（或：每月15日提醒我 09:00 繳費）
-• 查詢提醒（或：查詢 / 清單）
-• 取消提醒 ID（或：取消 ID）`;
+• 查詢提醒（或：查詢 / 清單）— 以卡片顯示，可點取消
+• 取消提醒 ID（或：取消 ID）
+• 底部選單：查詢提醒 | 使用說明 | 指令範例`;

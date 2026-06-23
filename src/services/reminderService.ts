@@ -8,7 +8,14 @@ import {
   formatRecurrenceTypeLabel,
   type RecurrenceRule,
 } from "../utils/recurrence.js";
-import { HELP_MESSAGE, parseCommand } from "./commandParser.js";
+import { env } from "../config/env.js";
+import { HELP_MESSAGE, type ParsedCommand } from "./commandParser.js";
+import { resolveCommand } from "./commandResolver.js";
+import {
+  buildReminderListFlex,
+  buildReminderListOverflowText,
+} from "./flexMessageBuilder.js";
+import type { LineMessage } from "./lineService.js";
 import * as lineService from "./lineService.js";
 
 const MAX_LIST_ITEMS_PER_MESSAGE = 10;
@@ -36,9 +43,9 @@ export function buildCreateSuccessMessage(reminder: ReminderListItem): string {
   const schedule = formatRecurrenceSchedule(reminder);
   if (schedule) {
     const typeLabel = formatRecurrenceTypeLabel(reminder.recurrenceType);
-    return `已建立${typeLabel}提醒 #${reminder.id}，首次於 ${formatDateTime(reminder.remindAt)}，之後${schedule} 重複：${reminder.message}\n可輸入「查詢提醒」查看，或「取消提醒 ${reminder.id}」取消。`;
+    return `已建立${typeLabel}提醒 #${reminder.id}，首次於 ${formatDateTime(reminder.remindAt)}，之後${schedule} 重複：${reminder.message}\n可點選單「查詢提醒」或輸入「取消提醒 ${reminder.id}」取消。`;
   }
-  return `已建立提醒 #${reminder.id}，將於 ${formatDateTime(reminder.remindAt)} 提醒您：${reminder.message}\n可輸入「查詢提醒」查看，或「取消提醒 ${reminder.id}」取消。`;
+  return `已建立提醒 #${reminder.id}，將於 ${formatDateTime(reminder.remindAt)} 提醒您：${reminder.message}\n可點選單「查詢提醒」或輸入「取消提醒 ${reminder.id}」取消。`;
 }
 
 export function buildReminderListMessages(
@@ -84,7 +91,7 @@ export function buildHelpMessage(
     | "missing_recurring_message"
 ): string {
   if (reason === "invalid_datetime_format") {
-    return "時間格式錯誤，請用：提醒我 YYYY-MM-DD HH:mm 內容\n例如：提醒我 2026-06-20 09:30 開會";
+    return "時間格式錯誤，請用：提醒我 YYYY-MM-DD HH:mm 內容\n例如：提醒我 2026-06-20 09:30 開會\n也可用自然語言：明天早上 9 點開會";
   }
   if (reason === "missing_message") {
     return "請補上提醒內容。\n例如：提醒我 10分鐘後 喝水";
@@ -107,12 +114,34 @@ export function buildHelpMessage(
   return HELP_MESSAGE;
 }
 
-export async function handleTextMessage(
-  text: string,
+async function replyReminderList(
+  replyToken: string,
+  reminders: ReminderListItem[]
+): Promise<void> {
+  if (env.flexListEnabled) {
+    const flex = buildReminderListFlex(reminders);
+    if (flex) {
+      const messages: LineMessage[] = [flex];
+      const overflow = buildReminderListOverflowText(reminders.length);
+      if (overflow) {
+        messages.push({ type: "text", text: overflow });
+      }
+      await lineService.replyMessages(replyToken, messages);
+      return;
+    }
+  }
+
+  const listMessages = buildReminderListMessages(reminders);
+  await lineService.replyMessages(
+    replyToken,
+    listMessages.map((text) => ({ type: "text", text }))
+  );
+}
+
+async function executeCommand(
+  command: ParsedCommand,
   context: MessageContext
 ): Promise<void> {
-  const command = parseCommand(text);
-
   switch (command.type) {
     case "create": {
       if (command.remindAt <= new Date()) {
@@ -185,8 +214,7 @@ export async function handleTextMessage(
         return;
       }
 
-      const listMessages = buildReminderListMessages(reminders);
-      await lineService.replyMessages(context.replyToken, listMessages);
+      await replyReminderList(context.replyToken, reminders);
       return;
     }
 
@@ -220,4 +248,43 @@ export async function handleTextMessage(
         buildHelpMessage(command.reason)
       );
   }
+}
+
+export async function handleTextMessage(
+  text: string,
+  context: MessageContext
+): Promise<void> {
+  const command = await resolveCommand(text);
+  await executeCommand(command, context);
+}
+
+export async function handlePostback(
+  data: string,
+  context: MessageContext
+): Promise<void> {
+  const params = new URLSearchParams(data);
+  const action = params.get("action");
+
+  if (action === "help") {
+    await lineService.replyMessage(context.replyToken, HELP_MESSAGE);
+    return;
+  }
+
+  if (action === "cancel") {
+    const id = Number(params.get("id"));
+    if (!Number.isInteger(id) || id <= 0) {
+      await lineService.replyMessage(
+        context.replyToken,
+        buildHelpMessage("invalid_cancel_id")
+      );
+      return;
+    }
+    await executeCommand({ type: "cancel", id }, context);
+    return;
+  }
+
+  await lineService.replyMessage(
+    context.replyToken,
+    "無法識別的操作，請使用底部選單或輸入「使用說明」。"
+  );
 }

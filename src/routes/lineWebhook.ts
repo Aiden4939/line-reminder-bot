@@ -1,17 +1,18 @@
 import type { WebhookEvent } from "@line/bot-sdk";
 import { Router, type Request, type Response } from "express";
 import { env } from "../config/env.js";
-import { handleTextMessage } from "../services/reminderService.js";
+import {
+  handlePostback,
+  handleTextMessage,
+} from "../services/reminderService.js";
 import type { MessageContext } from "../types/reminder.js";
 import { verifyLineSignature } from "../utils/lineSignature.js";
 
 export const lineWebhookRouter = Router();
 
-function resolveSource(event: WebhookEvent): Omit<MessageContext, "replyToken"> | null {
-  if (event.type !== "message" || event.message.type !== "text") {
-    return null;
-  }
-
+function resolveSource(
+  event: WebhookEvent
+): Omit<MessageContext, "replyToken"> | null {
   const source = event.source;
   const userId = source.userId;
   if (!userId) {
@@ -45,6 +46,27 @@ function resolveSource(event: WebhookEvent): Omit<MessageContext, "replyToken"> 
   return null;
 }
 
+async function dispatchEvent(event: WebhookEvent): Promise<void> {
+  const source = resolveSource(event);
+  if (!source || !event.replyToken) {
+    return;
+  }
+
+  const context: MessageContext = {
+    ...source,
+    replyToken: event.replyToken,
+  };
+
+  if (event.type === "message" && event.message.type === "text") {
+    await handleTextMessage(event.message.text, context);
+    return;
+  }
+
+  if (event.type === "postback") {
+    await handlePostback(event.postback.data, context);
+  }
+}
+
 lineWebhookRouter.post("/", async (req: Request, res: Response) => {
   const signature = req.headers["x-line-signature"] as string | undefined;
   const body = req.body as Buffer;
@@ -65,24 +87,10 @@ lineWebhookRouter.post("/", async (req: Request, res: Response) => {
   res.status(200).json({ ok: true });
 
   for (const event of events) {
-    if (event.type !== "message" || event.message.type !== "text") {
-      continue;
-    }
-
-    const source = resolveSource(event);
-    if (!source || !event.replyToken) {
-      continue;
-    }
-
-    const context: MessageContext = {
-      ...source,
-      replyToken: event.replyToken,
-    };
-
     try {
-      await handleTextMessage(event.message.text, context);
+      await dispatchEvent(event);
     } catch (error) {
-      console.error("[webhook] Failed to handle message:", error);
+      console.error("[webhook] Failed to handle event:", error);
     }
   }
 });
