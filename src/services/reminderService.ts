@@ -89,6 +89,7 @@ export function buildHelpMessage(
     | "invalid_weekday"
     | "invalid_day_of_month"
     | "missing_recurring_message"
+    | "explicit_help"
 ): string {
   if (reason === "invalid_datetime_format") {
     return "時間格式錯誤，請用：提醒我 YYYY-MM-DD HH:mm 內容\n例如：提醒我 2026-06-20 09:30 開會\n也可用自然語言：明天早上 9 點開會";

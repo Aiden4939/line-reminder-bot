@@ -16,10 +16,12 @@ test("resolveCommand uses rules without OpenAI key", async () => {
   assert.deepEqual(await resolveCommand("查詢提醒"), { type: "list" });
 });
 
-test("resolveCommand recognizes 使用說明", async () => {
+test("resolveCommand recognizes 使用說明 without LLM", async () => {
+  process.env.NLU_MODE = "hybrid";
+  process.env.OPENAI_API_KEY = "sk-test";
   const cmd = await resolveCommand("使用說明");
   assert.equal(cmd.type, "help");
   if (cmd.type === "help") {
-    assert.equal(cmd.reason, undefined);
+    assert.equal(cmd.reason, "explicit_help");
   }
 });

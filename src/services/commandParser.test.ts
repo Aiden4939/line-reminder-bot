@@ -16,6 +16,21 @@ test("supports list aliases", () => {
   assert.deepEqual(parseCommand("查詢提醒"), { type: "list" });
 });
 
+test("returns explicit_help for help keywords", () => {
+  assert.deepEqual(parseCommand("使用說明"), {
+    type: "help",
+    reason: "explicit_help",
+  });
+  assert.deepEqual(parseCommand("說明"), {
+    type: "help",
+    reason: "explicit_help",
+  });
+  assert.deepEqual(parseCommand("help"), {
+    type: "help",
+    reason: "explicit_help",
+  });
+});
+
 test("supports create relative spacing variants", () => {
   const tight = parseCommand("提醒我5分鐘後 喝水");
   const spaced = parseCommand("提醒我 5 分鐘後 喝水");

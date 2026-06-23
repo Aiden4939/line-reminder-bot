@@ -30,7 +30,8 @@ export type ParsedCommand =
         | "invalid_recurring_time_format"
         | "invalid_weekday"
         | "invalid_day_of_month"
-        | "missing_recurring_message";
+        | "missing_recurring_message"
+        | "explicit_help";
     };
 
 const ABSOLUTE_PATTERN =
@@ -73,7 +74,7 @@ export function parseCommand(text: string): ParsedCommand {
     trimmed === "說明" ||
     trimmed.toLowerCase() === "help"
   ) {
-    return { type: "help" };
+    return { type: "help", reason: "explicit_help" };
   }
 
   if (

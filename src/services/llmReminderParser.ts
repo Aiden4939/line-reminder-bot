@@ -50,13 +50,18 @@ function parseRemindAt(payload: LlmReminderPayload): Date | null {
 
   if (typeof payload.remind_at === "string" && payload.remind_at.trim()) {
     const raw = payload.remind_at.trim();
-    const iso = new Date(raw);
-    if (!Number.isNaN(iso.getTime())) {
-      return truncateToMinute(iso);
+    const localMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+    if (localMatch) {
+      const local = parseAbsoluteDateTime(`${localMatch[1]} ${localMatch[2]}`);
+      if (local) {
+        return truncateToMinute(local);
+      }
     }
-    const local = parseAbsoluteDateTime(raw);
-    if (local) {
-      return truncateToMinute(local);
+    if (/[zZ]$|[+-]\d{2}(?::\d{2})?$/.test(raw)) {
+      const iso = new Date(raw);
+      if (!Number.isNaN(iso.getTime())) {
+        return truncateToMinute(iso);
+      }
     }
   }
 
@@ -174,7 +179,8 @@ export async function parseCommandWithLlm(
     return null;
   }
 
-  const completion = await openai.chat.completions.create({
+  const completion = await openai.chat.completions.create(
+    {
     model: env.llmModel,
     response_format: { type: "json_object" },
     messages: [
@@ -207,7 +213,9 @@ export async function parseCommandWithLlm(
       },
       { role: "user", content: text },
     ],
-  });
+    },
+    { timeout: env.llmParseTimeoutMs }
+  );
 
   const content = completion.choices[0]?.message?.content?.trim();
   if (!content) {
