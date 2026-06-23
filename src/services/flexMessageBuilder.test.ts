@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { ReminderFlexItem } from "./flexMessageBuilder.js";
 
 process.env.LINE_CHANNEL_SECRET ||= "test-secret";
 process.env.LINE_CHANNEL_ACCESS_TOKEN ||= "test-token";
@@ -13,7 +14,7 @@ const { buildReminderListFlex, buildReminderListOverflowText } = await import(
 );
 
 test("buildReminderListFlex returns carousel for multiple reminders", () => {
-  const reminders = [1, 2].map((id) => ({
+  const reminders: ReminderFlexItem[] = [1, 2].map((id) => ({
     id,
     remindAt: new Date("2026-06-24T09:00:00+08:00"),
     message: `提醒${id}`,
