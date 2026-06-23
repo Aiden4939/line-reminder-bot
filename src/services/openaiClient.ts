@@ -9,5 +9,7 @@ export function createOpenAiClient(): OpenAI | null {
   return new OpenAI({
     apiKey: env.openaiApiKey,
     fetch: globalThis.fetch as unknown as Fetch,
+    timeout: env.llmParseTimeoutMs,
+    maxRetries: 0,
   });
 }

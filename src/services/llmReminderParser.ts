@@ -56,6 +56,7 @@ function parseRemindAt(payload: LlmReminderPayload): Date | null {
       if (local) {
         return truncateToMinute(local);
       }
+      return null;
     }
     if (/[zZ]$|[+-]\d{2}(?::\d{2})?$/.test(raw)) {
       const iso = new Date(raw);
@@ -68,7 +69,7 @@ function parseRemindAt(payload: LlmReminderPayload): Date | null {
   return null;
 }
 
-function mapLlmPayload(payload: LlmReminderPayload): ParsedCommand | null {
+export function mapLlmPayload(payload: LlmReminderPayload): ParsedCommand | null {
   const action = payload.action?.trim().toLowerCase();
   if (!action) {
     return null;
@@ -179,53 +180,59 @@ export async function parseCommandWithLlm(
     return null;
   }
 
-  const completion = await openai.chat.completions.create(
-    {
-    model: env.llmModel,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content: [
-          "你是 LINE 提醒 Bot 的指令解析器。只回傳 JSON，不要其他文字。",
-          `現在時間：${currentTimeLabel()}（時區 ${env.tz}）`,
-          "",
-          "JSON 格式：",
-          '{"action":"create|create_recurring|list|cancel|help",',
-          '"message":"提醒內容（create 必填）",',
-          '"remind_at":"YYYY-MM-DD HH:mm 或 ISO8601（一次性提醒）",',
-          '"minutes_from_now":數字,',
-          '"hours_from_now":數字,',
-          '"recurrence_type":"daily|weekly|monthly",',
-          '"time":"HH:mm",',
-          '"weekday":1-7或「一」到「日」,',
-          '"day_of_month":1-31,',
-          '"cancel_id":數字}',
-          "",
-          "規則：",
-          "- 查詢/列出提醒 → action=list",
-          "- 取消第 N 個 → action=cancel, cancel_id=N",
-          "- 明天早上九點開會 → action=create, message=開會, remind_at=推算後的 YYYY-MM-DD HH:mm",
-          "- 兩小時後喝水 → action=create, hours_from_now=2, message=喝水",
-          "- 每天九點喝水 → action=create_recurring, recurrence_type=daily, time=09:00, message=喝水",
-          "- 無法判斷 → action=help",
-        ].join("\n"),
-      },
-      { role: "user", content: text },
-    ],
-    },
-    { timeout: env.llmParseTimeoutMs }
-  );
-
-  const content = completion.choices[0]?.message?.content?.trim();
-  if (!content) {
-    return null;
-  }
-
   try {
-    const payload = JSON.parse(content) as LlmReminderPayload;
-    return mapLlmPayload(payload);
-  } catch {
+    const completion = await openai.chat.completions.create(
+      {
+      model: env.llmModel,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: [
+            "你是 LINE 提醒 Bot 的指令解析器。只回傳 JSON，不要其他文字。",
+            `現在時間：${currentTimeLabel()}（時區 ${env.tz}）`,
+            "",
+            "JSON 格式：",
+            '{"action":"create|create_recurring|list|cancel|help",',
+            '"message":"提醒內容（create 必填）",',
+            '"remind_at":"YYYY-MM-DD HH:mm 或 ISO8601（一次性提醒，hour 0-23、minute 0-59）",',
+            '"minutes_from_now":數字,',
+            '"hours_from_now":數字,',
+            '"recurrence_type":"daily|weekly|monthly",',
+            '"time":"HH:mm",',
+            '"weekday":1-7或「一」到「日」,',
+            '"day_of_month":1-31,',
+            '"cancel_id":數字}',
+            "",
+            "規則：",
+            "- 查詢/列出提醒 → action=list",
+            "- 取消第 N 個 → action=cancel, cancel_id=N",
+            "- 明天早上九點開會 → action=create, message=開會, remind_at=推算後的 YYYY-MM-DD HH:mm",
+            "- 兩小時後喝水 → action=create, hours_from_now=2, message=喝水",
+            "- 每天九點喝水 → action=create_recurring, recurrence_type=daily, time=09:00, message=喝水",
+            "- 無法判斷 → action=help",
+          ].join("\n"),
+        },
+        { role: "user", content: text },
+      ],
+      },
+      { timeout: env.llmParseTimeoutMs }
+    );
+
+    const content = completion.choices[0]?.message?.content?.trim();
+    if (!content) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(content) as LlmReminderPayload;
+      return mapLlmPayload(payload);
+    } catch (error) {
+      console.warn("[nlu] Failed to parse LLM JSON:", error);
+      return null;
+    }
+  } catch (error) {
+    console.error("[nlu] OpenAI request failed:", error);
     return null;
   }
 }

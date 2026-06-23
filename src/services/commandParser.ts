@@ -153,9 +153,13 @@ export function parseCommand(text: string): ParsedCommand {
     if (!remindAt) {
       return { type: "help", reason: "invalid_datetime_format" };
     }
+    const truncated = truncateToMinute(remindAt);
+    if (!truncated) {
+      return { type: "help", reason: "invalid_datetime_format" };
+    }
     return {
       type: "create",
-      remindAt: truncateToMinute(remindAt),
+      remindAt: truncated,
       message: absoluteMatch[2].trim(),
     };
   }
@@ -166,9 +170,13 @@ export function parseCommand(text: string): ParsedCommand {
     if (!Number.isInteger(minutes) || minutes <= 0) {
       return { type: "help" };
     }
+    const truncated = truncateToMinute(addMinutes(new Date(), minutes));
+    if (!truncated) {
+      return { type: "help", reason: "invalid_datetime_format" };
+    }
     return {
       type: "create",
-      remindAt: truncateToMinute(addMinutes(new Date(), minutes)),
+      remindAt: truncated,
       message: relativeMatch[2].trim(),
     };
   }

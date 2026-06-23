@@ -184,7 +184,7 @@ function computeFirstMonthly(
 }
 
 export function computeFirstRemindAt(now: Date, rule: RecurrenceRule): Date {
-  const truncatedNow = truncateToMinute(now);
+  const truncatedNow = truncateToMinute(now) ?? now;
   if (rule.recurrenceType === "daily") {
     return computeFirstDaily(truncatedNow, rule.time);
   }

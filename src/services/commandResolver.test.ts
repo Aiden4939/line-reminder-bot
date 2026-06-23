@@ -25,3 +25,13 @@ test("resolveCommand recognizes 使用說明 without LLM", async () => {
     assert.equal(cmd.reason, "explicit_help");
   }
 });
+
+test("resolveCommand hybrid without API key does not call LLM", async () => {
+  process.env.NLU_MODE = "hybrid";
+  process.env.OPENAI_API_KEY = "";
+  const cmd = await resolveCommand("明天下午幫我提醒開會");
+  assert.equal(cmd.type, "help");
+  if (cmd.type === "help") {
+    assert.equal(cmd.reason, undefined);
+  }
+});

@@ -55,6 +55,14 @@ test("returns specific help reason for invalid datetime format", () => {
     type: "help",
     reason: "invalid_datetime_format",
   });
+  assert.deepEqual(parseCommand("提醒我 2026-06-24 24:30 測試"), {
+    type: "help",
+    reason: "invalid_datetime_format",
+  });
+  assert.deepEqual(parseCommand("提醒我 2026-06-24 25:00 測試"), {
+    type: "help",
+    reason: "invalid_datetime_format",
+  });
 });
 
 test("returns specific help reason for missing message", () => {
