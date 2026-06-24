@@ -21,6 +21,9 @@ export type ParsedCommand =
     }
   | { type: "list" }
   | { type: "cancel"; id: number }
+  | { type: "enableNotifications" }
+  | { type: "disableNotifications" }
+  | { type: "startCreateWizard" }
   | {
       type: "help";
       reason?:
@@ -31,7 +34,8 @@ export type ParsedCommand =
         | "invalid_weekday"
         | "invalid_day_of_month"
         | "missing_recurring_message"
-        | "explicit_help";
+        | "explicit_help"
+        | "create_failed";
     };
 
 const ABSOLUTE_PATTERN =
@@ -60,6 +64,18 @@ const MONTHLY_PREFIX_PATTERN = /^每月\d{1,2}日(?:提醒我)?\s*\d{2}:\d{2}/;
 
 export function parseCommand(text: string): ParsedCommand {
   const trimmed = text.trim();
+
+  if (trimmed === "建立提醒") {
+    return { type: "startCreateWizard" };
+  }
+
+  if (trimmed === "開啟提醒") {
+    return { type: "enableNotifications" };
+  }
+
+  if (trimmed === "關閉提醒") {
+    return { type: "disableNotifications" };
+  }
 
   if (
     trimmed === "查詢提醒" ||
@@ -209,7 +225,16 @@ export function parseCommand(text: string): ParsedCommand {
   return { type: "help" };
 }
 
+export function isInterruptingCommand(text: string): boolean {
+  const command = parseCommand(text.trim());
+  if (command.type === "help" && command.reason === undefined) {
+    return false;
+  }
+  return true;
+}
+
 export const HELP_MESSAGE = `提醒 Bot 使用說明：
+• 建立提醒 — 以選單逐步建立
 • 提醒我 2026-06-20 09:30 開會
 • 提醒我 10分鐘後 喝水
 • 明天早上 9 點開會（自然語言，需設定 OPENAI_API_KEY）
@@ -218,4 +243,5 @@ export const HELP_MESSAGE = `提醒 Bot 使用說明：
 • 每月15日 09:00 繳費（或：每月15日提醒我 09:00 繳費）
 • 查詢提醒（或：查詢 / 清單）— 以卡片顯示，可點取消
 • 取消提醒 ID（或：取消 ID）
-• 底部選單：查詢提醒 | 使用說明 | 指令範例`;
+• 開啟提醒 / 關閉提醒 — 全域暫停或恢復 push 通知
+• 底部選單：建立提醒 | 查詢提醒 | 使用說明 | 指令範例`;

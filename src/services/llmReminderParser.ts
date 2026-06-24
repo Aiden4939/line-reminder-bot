@@ -75,20 +75,8 @@ export function mapLlmPayload(payload: LlmReminderPayload): ParsedCommand | null
     return null;
   }
 
-  if (action === "list") {
-    return { type: "list" };
-  }
-
-  if (action === "help") {
-    return { type: "help" };
-  }
-
-  if (action === "cancel") {
-    const id = Number(payload.cancel_id);
-    if (!Number.isInteger(id) || id <= 0) {
-      return { type: "help", reason: "invalid_cancel_id" };
-    }
-    return { type: "cancel", id };
+  if (action === "unsupported" || action === "help" || action === "list" || action === "cancel") {
+    return null;
   }
 
   if (action === "create") {
@@ -189,11 +177,11 @@ export async function parseCommandWithLlm(
         {
           role: "system",
           content: [
-            "你是 LINE 提醒 Bot 的指令解析器。只回傳 JSON，不要其他文字。",
+            "你是 LINE 提醒 Bot 的指令解析器，僅負責解析「建立提醒」意圖。只回傳 JSON，不要其他文字。",
             `現在時間：${currentTimeLabel()}（時區 ${env.tz}）`,
             "",
             "JSON 格式：",
-            '{"action":"create|create_recurring|list|cancel|help",',
+            '{"action":"create|create_recurring|unsupported",',
             '"message":"提醒內容（create 必填）",',
             '"remind_at":"YYYY-MM-DD HH:mm 或 ISO8601（一次性提醒，hour 0-23、minute 0-59）",',
             '"minutes_from_now":數字,',
@@ -201,16 +189,14 @@ export async function parseCommandWithLlm(
             '"recurrence_type":"daily|weekly|monthly",',
             '"time":"HH:mm",',
             '"weekday":1-7或「一」到「日」,',
-            '"day_of_month":1-31,',
-            '"cancel_id":數字}',
+            '"day_of_month":1-31}',
             "",
             "規則：",
-            "- 查詢/列出提醒 → action=list",
-            "- 取消第 N 個 → action=cancel, cancel_id=N",
+            "- 僅處理建立一次性或重複提醒",
+            "- 查詢、取消、說明、閒聊、無法判斷 → action=unsupported",
             "- 明天早上九點開會 → action=create, message=開會, remind_at=推算後的 YYYY-MM-DD HH:mm",
             "- 兩小時後喝水 → action=create, hours_from_now=2, message=喝水",
             "- 每天九點喝水 → action=create_recurring, recurrence_type=daily, time=09:00, message=喝水",
-            "- 無法判斷 → action=help",
           ].join("\n"),
         },
         { role: "user", content: text },

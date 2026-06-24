@@ -8,6 +8,7 @@ import {
 
 type FlexMessage = messagingApi.FlexMessage;
 type FlexBubble = messagingApi.FlexBubble;
+type FlexComponent = messagingApi.FlexComponent;
 
 export const FLEX_CAROUSEL_LIMIT = 12;
 
@@ -19,6 +20,63 @@ export interface ReminderFlexItem {
   recurrenceTime: string | null;
   recurrenceWeekday: number | null;
   recurrenceDayOfMonth: number | null;
+  isPaused: boolean;
+  skipNextOnce: boolean;
+}
+
+function postbackButton(
+  label: string,
+  data: string,
+  displayText: string
+): FlexComponent {
+  return {
+    type: "button",
+    style: "secondary",
+    height: "sm",
+    action: {
+      type: "postback",
+      label,
+      data,
+      displayText,
+    },
+  };
+}
+
+function buildFooterButtons(reminder: ReminderFlexItem): FlexComponent[] {
+  const buttons: FlexComponent[] = [
+    postbackButton(
+      "取消提醒",
+      `action=cancel&id=${reminder.id}`,
+      `取消提醒 ${reminder.id}`
+    ),
+  ];
+
+  if (reminder.recurrenceType !== "none") {
+    if (reminder.isPaused) {
+      buttons.push(
+        postbackButton(
+          "恢復重複",
+          `action=resume_recurring&id=${reminder.id}`,
+          `恢復重複 ${reminder.id}`
+        )
+      );
+    } else {
+      buttons.push(
+        postbackButton(
+          "暫停重複",
+          `action=pause_recurring&id=${reminder.id}`,
+          `暫停重複 ${reminder.id}`
+        ),
+        postbackButton(
+          "跳過下次",
+          `action=skip_next&id=${reminder.id}`,
+          `跳過下次 ${reminder.id}`
+        )
+      );
+    }
+  }
+
+  return buttons;
 }
 
 function buildBubble(reminder: ReminderFlexItem): FlexBubble {
@@ -27,6 +85,18 @@ function buildBubble(reminder: ReminderFlexItem): FlexBubble {
   const subtitle = schedule
     ? `${typeLabel} ${schedule}`
     : formatDateTime(reminder.remindAt);
+
+  const statusLines: string[] = [];
+  if (schedule) {
+    statusLines.push(`下次：${formatDateTime(reminder.remindAt)}`);
+  } else {
+    statusLines.push("一次性提醒");
+  }
+  if (reminder.isPaused) {
+    statusLines.push("（已暫停重複）");
+  } else if (reminder.skipNextOnce) {
+    statusLines.push("（將跳過下次）");
+  }
 
   return {
     type: "bubble",
@@ -58,9 +128,7 @@ function buildBubble(reminder: ReminderFlexItem): FlexBubble {
         },
         {
           type: "text",
-          text: schedule
-            ? `下次：${formatDateTime(reminder.remindAt)}`
-            : "一次性提醒",
+          text: statusLines.join(" "),
           size: "xs",
           color: "#888888",
           wrap: true,
@@ -70,19 +138,8 @@ function buildBubble(reminder: ReminderFlexItem): FlexBubble {
     footer: {
       type: "box",
       layout: "vertical",
-      contents: [
-        {
-          type: "button",
-          style: "secondary",
-          height: "sm",
-          action: {
-            type: "postback",
-            label: "取消提醒",
-            data: `action=cancel&id=${reminder.id}`,
-            displayText: `取消提醒 ${reminder.id}`,
-          },
-        },
-      ],
+      spacing: "sm",
+      contents: buildFooterButtons(reminder),
     },
   };
 }

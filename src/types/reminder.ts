@@ -20,9 +20,40 @@ export interface Reminder {
   recurrenceTime: string | null;
   recurrenceWeekday: number | null;
   recurrenceDayOfMonth: number | null;
+  isPaused: boolean;
+  skipNextOnce: boolean;
   status: ReminderStatus;
   errorMessage: string | null;
   createdAt: Date;
+  updatedAt: Date;
+}
+
+export type CreateReminderWizardStep =
+  | "chooseKind"
+  | "chooseRecurrence"
+  | "pickWeekday"
+  | "pickDayOfMonth"
+  | "pickDatetime"
+  | "pickTime"
+  | "enterMessage";
+
+export interface CreateReminderDraft {
+  kind?: "once" | "recurring";
+  recurrenceType?: "daily" | "weekly" | "monthly";
+  weekday?: number;
+  dayOfMonth?: number;
+  remindAt?: string;
+  time?: string;
+}
+
+export interface ConversationSession {
+  sourceType: SourceType;
+  sourceId: string;
+  userId: string;
+  flow: "create_reminder";
+  step: CreateReminderWizardStep;
+  draft: CreateReminderDraft;
+  expiresAt: Date;
   updatedAt: Date;
 }
 

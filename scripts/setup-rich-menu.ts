@@ -18,7 +18,7 @@ const blobClient = new messagingApi.MessagingApiBlobClient({
 
 const MENU_WIDTH = 2500;
 const MENU_HEIGHT = 843;
-const COL_WIDTH = Math.floor(MENU_WIDTH / 3);
+const COL_WIDTH = Math.floor(MENU_WIDTH / 4);
 
 async function main(): Promise<void> {
   const richMenu: messagingApi.RichMenuRequest = {
@@ -31,12 +31,25 @@ async function main(): Promise<void> {
         bounds: { x: 0, y: 0, width: COL_WIDTH, height: MENU_HEIGHT },
         action: {
           type: "message",
+          label: "建立提醒",
+          text: "建立提醒",
+        },
+      },
+      {
+        bounds: { x: COL_WIDTH, y: 0, width: COL_WIDTH, height: MENU_HEIGHT },
+        action: {
+          type: "message",
           label: "查詢提醒",
           text: "查詢提醒",
         },
       },
       {
-        bounds: { x: COL_WIDTH, y: 0, width: COL_WIDTH, height: MENU_HEIGHT },
+        bounds: {
+          x: COL_WIDTH * 2,
+          y: 0,
+          width: COL_WIDTH,
+          height: MENU_HEIGHT,
+        },
         action: {
           type: "message",
           label: "使用說明",
@@ -45,9 +58,9 @@ async function main(): Promise<void> {
       },
       {
         bounds: {
-          x: COL_WIDTH * 2,
+          x: COL_WIDTH * 3,
           y: 0,
-          width: MENU_WIDTH - COL_WIDTH * 2,
+          width: MENU_WIDTH - COL_WIDTH * 3,
           height: MENU_HEIGHT,
         },
         action: {
@@ -79,7 +92,9 @@ async function main(): Promise<void> {
   await client.setDefaultRichMenu(richMenuId);
 
   console.log(`[rich-menu] Created and set default rich menu: ${richMenuId}`);
-  console.log("[rich-menu] Areas: 查詢提醒 | 使用說明 | 指令範例(postback)");
+  console.log(
+    "[rich-menu] Areas: 建立提醒 | 查詢提醒 | 使用說明 | 指令範例(postback)"
+  );
 }
 
 main().catch((error) => {

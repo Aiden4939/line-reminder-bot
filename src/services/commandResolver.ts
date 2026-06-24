@@ -2,6 +2,21 @@ import { env } from "../config/env.js";
 import { parseCommand, type ParsedCommand } from "./commandParser.js";
 import { parseCommandWithLlm } from "./llmReminderParser.js";
 
+export function resolveLlmHybridResult(
+  llmCommand: ParsedCommand | null
+): ParsedCommand {
+  if (
+    llmCommand?.type === "create" ||
+    llmCommand?.type === "createRecurring"
+  ) {
+    return llmCommand;
+  }
+  if (llmCommand?.type === "help" && llmCommand.reason !== undefined) {
+    return llmCommand;
+  }
+  return { type: "help", reason: "create_failed" };
+}
+
 export async function resolveCommand(text: string): Promise<ParsedCommand> {
   const command = parseCommand(text);
 
@@ -15,12 +30,10 @@ export async function resolveCommand(text: string): Promise<ParsedCommand> {
 
   try {
     const llmCommand = await parseCommandWithLlm(text);
-    if (llmCommand) {
-      return llmCommand;
-    }
+    return resolveLlmHybridResult(llmCommand);
   } catch (error) {
-    console.warn("[nlu] LLM parsing failed, fallback to help:", error);
+    console.warn("[nlu] LLM parsing failed, fallback to create_failed:", error);
   }
 
-  return command;
+  return { type: "help", reason: "create_failed" };
 }

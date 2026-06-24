@@ -43,4 +43,36 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE reminders ADD CONSTRAINT reminders_recurrence_type_check
       CHECK (recurrence_type IN ('none', 'daily', 'weekly', 'monthly'));
   `);
+
+  await pool.query(`
+    ALTER TABLE reminders
+      ADD COLUMN IF NOT EXISTS is_paused BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE reminders
+      ADD COLUMN IF NOT EXISTS skip_next_once BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_notification_settings (
+      source_type  TEXT NOT NULL,
+      source_id    TEXT NOT NULL,
+      user_id      TEXT NOT NULL,
+      enabled      BOOLEAN NOT NULL DEFAULT true,
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (source_type, source_id, user_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_sessions (
+      source_type  TEXT NOT NULL,
+      source_id    TEXT NOT NULL,
+      user_id      TEXT NOT NULL,
+      flow         TEXT NOT NULL,
+      step         TEXT NOT NULL,
+      draft        JSONB NOT NULL DEFAULT '{}',
+      expires_at   TIMESTAMPTZ NOT NULL,
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (source_type, source_id, user_id)
+    );
+  `);
 }

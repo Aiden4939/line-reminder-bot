@@ -77,7 +77,8 @@ async function dispatchEvent(event: WebhookEvent): Promise<void> {
       ...source,
       replyToken: event.replyToken,
     };
-    await handlePostback(event.postback.data, context);
+    const params = (event.postback.params ?? {}) as Record<string, string>;
+    await handlePostback(event.postback.data, context, params);
   }
 }
 

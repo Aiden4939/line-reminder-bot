@@ -1,3 +1,5 @@
+import * as conversationSessionRepository from "../repositories/conversationSessionRepository.js";
+import * as notificationSettingsRepository from "../repositories/notificationSettingsRepository.js";
 import * as reminderRepository from "../repositories/reminderRepository.js";
 import type { Reminder } from "../types/reminder.js";
 import type { MessageContext } from "../types/reminder.js";
@@ -5,18 +7,39 @@ import { formatDateTime } from "../utils/dateParser.js";
 import {
   computeFirstRemindAt,
   formatRecurrenceSchedule,
-  formatRecurrenceTypeLabel,
   type RecurrenceRule,
 } from "../utils/recurrence.js";
 import { env } from "../config/env.js";
-import { HELP_MESSAGE, type ParsedCommand } from "./commandParser.js";
+import {
+  HELP_MESSAGE,
+  isInterruptingCommand,
+  parseCommand,
+  type ParsedCommand,
+} from "./commandParser.js";
 import { resolveCommand } from "./commandResolver.js";
+import {
+  cancelWizard,
+  handleWizardPostback,
+  handleWizardText,
+  startWizard,
+} from "./createReminderWizard.js";
 import {
   buildReminderListFlex,
   buildReminderListOverflowText,
 } from "./flexMessageBuilder.js";
 import type { LineMessage } from "./lineService.js";
 import * as lineService from "./lineService.js";
+import {
+  buildCancelNotFoundMessage,
+  buildCancelSuccessMessage,
+  buildCreateSuccessMessage,
+  buildPauseRecurringNotFoundMessage,
+  buildPauseRecurringSuccessMessage,
+  buildResumeRecurringNotFoundMessage,
+  buildResumeRecurringSuccessMessage,
+  buildSkipNextNotFoundMessage,
+  buildSkipNextSuccessMessage,
+} from "./reminderMessages.js";
 
 const MAX_LIST_ITEMS_PER_MESSAGE = 10;
 
@@ -29,24 +52,24 @@ type ReminderListItem = Pick<
   | "recurrenceTime"
   | "recurrenceWeekday"
   | "recurrenceDayOfMonth"
+  | "isPaused"
+  | "skipNextOnce"
 >;
 
 function formatListLine(reminder: ReminderListItem): string {
   const schedule = formatRecurrenceSchedule(reminder);
+  const statusSuffix = reminder.isPaused
+    ? "（已暫停）"
+    : reminder.skipNextOnce
+      ? "（跳過下次）"
+      : "";
   if (schedule) {
-    return `#${reminder.id} | ${schedule} | ${reminder.message}（下次：${formatDateTime(reminder.remindAt)}）`;
+    return `#${reminder.id} | ${schedule} | ${reminder.message}（下次：${formatDateTime(reminder.remindAt)}）${statusSuffix}`;
   }
-  return `#${reminder.id} | ${formatDateTime(reminder.remindAt)} | ${reminder.message}`;
+  return `#${reminder.id} | ${formatDateTime(reminder.remindAt)} | ${reminder.message}${statusSuffix}`;
 }
 
-export function buildCreateSuccessMessage(reminder: ReminderListItem): string {
-  const schedule = formatRecurrenceSchedule(reminder);
-  if (schedule) {
-    const typeLabel = formatRecurrenceTypeLabel(reminder.recurrenceType);
-    return `已建立${typeLabel}提醒 #${reminder.id}，首次於 ${formatDateTime(reminder.remindAt)}，之後${schedule} 重複：${reminder.message}\n可點選單「查詢提醒」或輸入「取消提醒 ${reminder.id}」取消。`;
-  }
-  return `已建立提醒 #${reminder.id}，將於 ${formatDateTime(reminder.remindAt)} 提醒您：${reminder.message}\n可點選單「查詢提醒」或輸入「取消提醒 ${reminder.id}」取消。`;
-}
+export { buildCreateSuccessMessage } from "./reminderMessages.js";
 
 export function buildReminderListMessages(
   reminders: ReminderListItem[]
@@ -68,18 +91,6 @@ export function buildReminderListMessages(
   });
 }
 
-export function buildCancelNotFoundMessage(id: number): string {
-  return `找不到可取消的提醒 #${id}，請先輸入「查詢提醒」確認 ID 是否存在且狀態為待發送。`;
-}
-
-export function buildCancelSuccessMessage(reminder: ReminderListItem): string {
-  const typeLabel = formatRecurrenceTypeLabel(reminder.recurrenceType);
-  if (typeLabel) {
-    return `已取消${typeLabel}提醒 #${reminder.id}。`;
-  }
-  return `已取消提醒 #${reminder.id}。`;
-}
-
 export function buildHelpMessage(
   reason?:
     | "invalid_datetime_format"
@@ -90,7 +101,11 @@ export function buildHelpMessage(
     | "invalid_day_of_month"
     | "missing_recurring_message"
     | "explicit_help"
+    | "create_failed"
 ): string {
+  if (reason === "create_failed") {
+    return "建立提醒失敗";
+  }
   if (reason === "invalid_datetime_format") {
     return "時間格式錯誤，請用：提醒我 YYYY-MM-DD HH:mm 內容\n例如：提醒我 2026-06-20 09:30 開會\n也可用自然語言：明天早上 9 點開會";
   }
@@ -242,6 +257,36 @@ async function executeCommand(
       return;
     }
 
+    case "enableNotifications": {
+      await notificationSettingsRepository.setNotificationsEnabled(
+        context.sourceType,
+        context.sourceId,
+        context.userId,
+        true
+      );
+      await lineService.replyMessage(context.replyToken, "已開啟提醒通知。");
+      return;
+    }
+
+    case "disableNotifications": {
+      await notificationSettingsRepository.setNotificationsEnabled(
+        context.sourceType,
+        context.sourceId,
+        context.userId,
+        false
+      );
+      await lineService.replyMessage(
+        context.replyToken,
+        "已關閉提醒通知，現有不會再收到 push（提醒仍保留，開啟後一次性到期項目會補發）。"
+      );
+      return;
+    }
+
+    case "startCreateWizard": {
+      await startWizard(context);
+      return;
+    }
+
     case "help":
     default:
       await lineService.replyMessage(
@@ -251,20 +296,67 @@ async function executeCommand(
   }
 }
 
+async function clearWizardSession(context: MessageContext): Promise<void> {
+  await conversationSessionRepository.deleteSession(
+    context.sourceType,
+    context.sourceId,
+    context.userId
+  );
+}
+
 export async function handleTextMessage(
   text: string,
   context: MessageContext
 ): Promise<void> {
-  const command = await resolveCommand(text);
+  const trimmed = text.trim();
+  const session = await conversationSessionRepository.findActiveSession(
+    context.sourceType,
+    context.sourceId,
+    context.userId
+  );
+
+  if (session) {
+    if (trimmed === "取消") {
+      await cancelWizard(context);
+      return;
+    }
+
+    if (trimmed === "建立提醒") {
+      await startWizard(context);
+      return;
+    }
+
+    if (isInterruptingCommand(trimmed)) {
+      await clearWizardSession(context);
+      const command = await resolveCommand(trimmed);
+      await executeCommand(command, context);
+      return;
+    }
+
+    const handled = await handleWizardText(trimmed, context);
+    if (handled) {
+      return;
+    }
+  }
+
+  const command = await resolveCommand(trimmed);
   await executeCommand(command, context);
 }
 
 export async function handlePostback(
   data: string,
-  context: MessageContext
+  context: MessageContext,
+  params: Record<string, string> = {}
 ): Promise<void> {
-  const params = new URLSearchParams(data);
-  const action = params.get("action");
+  const wizardHandled = await handleWizardPostback(data, params, context);
+  if (wizardHandled) {
+    return;
+  }
+
+  await clearWizardSession(context);
+
+  const urlParams = new URLSearchParams(data);
+  const action = urlParams.get("action");
 
   if (action === "help") {
     await lineService.replyMessage(context.replyToken, HELP_MESSAGE);
@@ -272,7 +364,7 @@ export async function handlePostback(
   }
 
   if (action === "cancel") {
-    const id = Number(params.get("id"));
+    const id = Number(urlParams.get("id"));
     if (!Number.isInteger(id) || id <= 0) {
       await lineService.replyMessage(
         context.replyToken,
@@ -281,6 +373,78 @@ export async function handlePostback(
       return;
     }
     await executeCommand({ type: "cancel", id }, context);
+    return;
+  }
+
+  if (action === "pause_recurring") {
+    const id = Number(urlParams.get("id"));
+    if (!Number.isInteger(id) || id <= 0) {
+      await lineService.replyMessage(
+        context.replyToken,
+        buildHelpMessage("invalid_cancel_id")
+      );
+      return;
+    }
+    const paused = await reminderRepository.pauseRecurringReminder(
+      id,
+      context.sourceType,
+      context.sourceId,
+      context.userId
+    );
+    await lineService.replyMessage(
+      context.replyToken,
+      paused
+        ? buildPauseRecurringSuccessMessage(id)
+        : buildPauseRecurringNotFoundMessage(id)
+    );
+    return;
+  }
+
+  if (action === "resume_recurring") {
+    const id = Number(urlParams.get("id"));
+    if (!Number.isInteger(id) || id <= 0) {
+      await lineService.replyMessage(
+        context.replyToken,
+        buildHelpMessage("invalid_cancel_id")
+      );
+      return;
+    }
+    const resumed = await reminderRepository.resumeRecurringReminder(
+      id,
+      context.sourceType,
+      context.sourceId,
+      context.userId
+    );
+    await lineService.replyMessage(
+      context.replyToken,
+      resumed
+        ? buildResumeRecurringSuccessMessage(id)
+        : buildResumeRecurringNotFoundMessage(id)
+    );
+    return;
+  }
+
+  if (action === "skip_next") {
+    const id = Number(urlParams.get("id"));
+    if (!Number.isInteger(id) || id <= 0) {
+      await lineService.replyMessage(
+        context.replyToken,
+        buildHelpMessage("invalid_cancel_id")
+      );
+      return;
+    }
+    const skipped = await reminderRepository.skipNextRecurringReminder(
+      id,
+      context.sourceType,
+      context.sourceId,
+      context.userId
+    );
+    await lineService.replyMessage(
+      context.replyToken,
+      skipped
+        ? buildSkipNextSuccessMessage(id)
+        : buildSkipNextNotFoundMessage(id)
+    );
     return;
   }
 

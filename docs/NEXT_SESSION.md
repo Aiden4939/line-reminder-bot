@@ -15,120 +15,117 @@ LINE 提醒 Bot：文字指令建立 / 查詢 / 取消提醒，到期 push 通�
 
 ---
 
-## B. 2026-06-23 已完成（已 push `main`）
+## B. 2026-06-24 已完成（待 redeploy）
 
 ### 功能
 
 | 功能 | 說明 | 關鍵檔案 |
 |------|------|----------|
-| **Rich Menu** | 三格：查詢提醒 / 使用說明 / 指令範例 | `scripts/setup-rich-menu.ts` |
-| **Flex 卡片** | 查詢提醒時 carousel（最多 12 張），可 postback 取消 | `src/services/flexMessageBuilder.ts` |
-| **OpenAI NLU** | `hybrid`：規則優先，無法解析再 LLM | `commandResolver.ts`, `llmReminderParser.ts` |
-| **Postback** | webhook 處理 `action=cancel&id=N`、`action=help` | `lineWebhook.ts`, `reminderService.ts` |
-| **無 LIFF** | 依使用者要求，未實作 LIFF | — |
+| **LLM 僅建立提醒** | hybrid 維持；LLM 只解析 create / create_recurring；查詢/取消/閒聊 →「建立提醒失敗」；驗證錯誤（缺內容、時間格式）仍回具體提示 | `commandResolver.ts`, `llmReminderParser.ts` |
+| **建立提醒精靈** | 文字「建立提醒」→ 選一次性/重複 → 選時間 → 輸入內容；session 存 DB（30 分鐘 TTL） | `createReminderWizard.ts`, `conversationSessionRepository.ts` |
+| **開啟/關閉提醒** | 全域 push 開關（每對話每位使用者）；提醒保留 DB | `notificationSettingsRepository.ts`, `reminderScheduler.ts` |
+| **重複提醒控制** | Flex 卡片：暫停重複 / 恢復重複 / 跳過下次（僅 postback，無文字指令） | `flexMessageBuilder.ts`, `reminderRepository.ts` |
+| **Rich Menu 四格** | 建立提醒 \| 查詢提醒 \| 使用說明 \| 指令範例 | `scripts/setup-rich-menu.ts` |
 
-### NLU 靜默失敗修正（`2e337d8` + follow-up）
+### DB schema 新增（啟動時 `ensureSchema` 自動 migrate）
 
-- **問題**：LLM 回傳 `hour=24`（如 `2026-06-24 24:30`）→ `truncateToMinute` throw → webhook 不回 LINE
-- **修正**：
-  - `parseAbsoluteDateTime` 拒絕 hour≥24、minute≥60；`truncateToMinute` 回傳 `null` 不 throw
-  - `mapLlmPayload` 畸形時間 → `invalid_datetime_format`
-  - webhook catch 用 `replyToken` 回覆（非時間專用誤導文案）
-  - OpenAI client timeout 20s（`LLM_PARSE_TIMEOUT_MS`）
-- **Bugbot review follow-up**：修正 `parseAbsoluteDateTime` 分鐘捕獲 regression（regex 三群組）
+- `user_notification_settings` — 全域 push 開關
+- `conversation_sessions` — 建立提醒精靈狀態
+- `reminders.is_paused`、`reminders.skip_next_once` — 重複提醒暫停/跳過
 
-### Bugbot 修正（`98ef23a`）
+### Scheduler 行為
 
-- 明確 help（使用說明 / 說明 / help）標 `explicit_help`，不進 LLM
-- LLM `remind_at` 優先依 `env.tz` 解析
-- OpenAI 請求逾時 `LLM_PARSE_TIMEOUT_MS`（預設 20s）
+| 情境 | 行為 |
+|------|------|
+| 全域關閉 + 一次性 | 維持 `pending`，不 push；開啟後補發 |
+| 全域關閉 + 重複 | 不 push，仍推進 `remind_at`（避免排程卡住） |
+| `is_paused` | 不 claim、不 push、不推進 |
+| `skip_next_once` | 跳過本次 push，推進下次並清 flag |
 
-### CI / 型別修正（`eacdd9a`, `d42283a`）
+### Bugbot review 修正（同次實作）
 
-- `lineWebhook.ts`：窄化 event 型別再取 `replyToken`
-- `flexMessageBuilder`：`RecurrenceType`、測試 fixture 型別
+| Finding | 處理 |
+|---------|------|
+| LLM 驗證錯誤被蓋成「建立提醒失敗」 | ✅ `resolveLlmHybridResult` 保留 `help` + `reason` |
+| Flex postback 未清除精靈 session | ✅ `handlePostback` 非 wizard 操作前清 session |
+| 閒聊顯示「建立提醒失敗」 | ✅ 依產品規格保留 |
+| 關閉通知時重複提醒仍推進 | ✅ 依產品規格保留 |
 
-### Git 最新 commit
+### 測試
 
-| Commit | 說明 |
-|--------|------|
-| `2e337d8` | NLU 畸形 datetime 靜默失敗修復 |
-| `129274e` | NEXT_SESSION 交接文件 |
-| `d42283a` | flex test `RecurrenceType` |
-| `230558f` | Rich Menu + Flex + OpenAI NLU |
+- `npm test`：42 項全過
+- `npm run build`：通過
 
 ---
 
-## C. 遠端部署現況（使用者已 deploy，2026-06-23）
+## C. 2026-06-23 已完成（已 push `main`）
+
+| 功能 | 說明 |
+|------|------|
+| Rich Menu（舊三格） | 查詢提醒 / 使用說明 / 指令範例 |
+| Flex 卡片 | carousel 查詢列表 + 取消 postback |
+| OpenAI NLU hybrid | 規則優先，無法解析再 LLM |
+| NLU 靜默失敗修復 | `2e337d8`, `7fe3ac3` |
+
+---
+
+## D. 遠端部署現況
 
 | 項目 | 狀態 |
 |------|------|
-| GHCR image build | ✅ 通過（待 redeploy `2e337d8` 後最新版） |
-| `line-bot` deploy（web-ubuntu） | ✅ 已部署；**建議 redeploy** 含 NLU 修復版 |
-| **Rich Menu 顯示** | ❌ **需手動跑腳本**（見下方） |
-| **Flex 卡片** | ⚠️ 需「查詢提醒」且有待發送提醒；`FLEX_LIST_ENABLED=true` |
-| **OpenAI 自然語言** | ⚠️ 需主機 `.env` 有 `TELEGRAM_OPENAI_API_KEY`（compose 共用） |
+| GHCR image build | ⚠️ 待 push 後 CI build |
+| `line-bot` deploy（web-ubuntu） | ⚠️ **需 redeploy** 含本次 schema + 功能 |
+| **Rich Menu** | ❌ **需重新跑腳本**（已改四格，見下方） |
+| **建立提醒精靈** | ⚠️ 需 redeploy + DB migrate（啟動自動） |
+| **OpenAI 自然語言** | ⚠️ 僅建立提醒；需 `TELEGRAM_OPENAI_API_KEY` |
 
-### Rich Menu 為何 deploy 後看不到？
-
-**Docker deploy 不會建立 Rich Menu。** 需對 LINE API 執行一次：
+### Rich Menu 更新步驟
 
 ```bash
 cd line-reminder-bot
-# .env 需 LINE_CHANNEL_ACCESS_TOKEN、LINE_CHANNEL_SECRET
 npm install
 npm run setup-rich-menu
 ```
 
-- 選單圖：`assets/rich-menu.png`（2500×843），沒有則腳本警告，需至 LINE Manager 手傳
-- 可在本機跑（用同一 Channel token），不必在容器內
-
-### Flex 卡片何時出現？
-
-- 使用者輸入「**查詢提醒**」（或 Rich Menu 第一格）
-- 且 DB 有 **pending** 提醒
-- 不會在開啟聊天時自動出現
+- 選單圖：`assets/rich-menu.png`（2500×843，建議改四格版面）
+- Docker deploy **不會**自動建立 Rich Menu
 
 ### OpenAI 何時會被呼叫？
 
-`NLU_MODE=hybrid` 且 `OPENAI_API_KEY` 有值時，僅當規則 parser 回 `{ type: "help" }` **且無 reason** 才呼叫 LLM。
+`NLU_MODE=hybrid` 且 `OPENAI_API_KEY` 有值時，僅當規則 parser 回 `{ type: "help" }` **且無 reason** 才呼叫 LLM。  
+LLM **僅**回 `create` / `create_recurring`；其他意圖 →「建立提醒失敗」。
 
-**不支援：**「每小時重複」— 僅 daily / weekly / monthly + 一次性提醒。  
-**主機確認：**
-
-```bash
-docker exec svc-line-bot printenv NLU_MODE OPENAI_API_KEY
-```
+**不支援：** 每小時重複（僅 daily / weekly / monthly + 一次性）。
 
 ---
 
-## D. Infra 相關（`inwanding-infra`）
+## E. Infra 相關（`inwanding-infra`）
 
 | 變數 | 說明 |
 |------|------|
-| `TELEGRAM_OPENAI_API_KEY` | line-bot 與 telegram-bot **共用**（`OPENAI_API_KEY` 注入） |
+| `TELEGRAM_OPENAI_API_KEY` | line-bot 與 telegram-bot 共用 |
 | `LINE_BOT_NLU_MODE` | 預設 `hybrid` |
 | `LINE_BOT_FLEX_LIST_ENABLED` | 預設 `true` |
 
 compose：`line-bot` + `line-bot-db` + nginx `linebot.inwanding.com`
 
-**Deploy 前記得：** `cd ~/inwanding-infra && git pull`（workflow 不會自動 pull）
+**Deploy 前記得：** `cd ~/inwanding-infra && git pull`
 
 ---
 
-## E. 已知限制 / Bugbot infra 待辦（未修）
+## F. 已知限制 / 待辦
 
 - Deploy workflow 不含 `git pull`（`inwanding-infra`）
-- `telegram-bot` workspace 掛載 `:ro`，dev 無法寫檔
-- 4GB 主機無 memory limit
+- reply 失敗但 DB 已寫入 — 已知，未改
 - 備份腳本未含 `line-bot-db`
+- 每小時重複提醒 — 未支援
 
 ---
 
-## F. 環境變數速查（`.env.example`）
+## G. 環境變數速查
 
 ```env
-OPENAI_API_KEY=          # 本機開發；遠端由 TELEGRAM_OPENAI_API_KEY 注入
+OPENAI_API_KEY=
 NLU_MODE=hybrid
 FLEX_LIST_ENABLED=true
 LLM_PARSE_TIMEOUT_MS=20000
@@ -136,48 +133,39 @@ LLM_PARSE_TIMEOUT_MS=20000
 
 ---
 
-## G. 本機開發注意
-
-- 本機 Windows 環境 `npm` / `tsc` 曾 **segfault**，型別檢查靠 **CI Docker build**
-- 使用者要求：**未明說前不要 commit / push**
-- Git 全域已改 `Aiden4939`；`uv` 已裝（Serena MCP 用，與本 repo 無關）
-
----
-
 ## H. 建議下一手
 
-1. **Redeploy `line-bot`**（含 `2e337d8` NLU 修復）
-2. 主機確認 `TELEGRAM_OPENAI_API_KEY` 有值
-3. 跑 `npm run setup-rich-menu` → LINE 底部選單
-4. 測試：自然語言「明天早上 9 點開會」；畸形時間應回「時間格式錯誤」非靜默
-5. （可選）CI 加 `typecheck` job、infra deploy 加 `git pull`
-6. （可選）每小時重複提醒 — **新需求**，目前不支援
-
-## I. Bugbot review 備註（2026-06-24）
-
-| Finding | 處理 |
-|---------|------|
-| `parseAbsoluteDateTime` 分鐘遺失 | ✅ 已修（match[2]/[3]） |
-| webhook catch 誤導文案 | ✅ 改為通用錯誤訊息 |
-| LLM timeout 30s > replyToken | ✅ 維持 20s 預設 |
-| reply 失敗但 DB 已寫入 | ⚠️ 已知限制，未改商業邏輯 |
+1. **Redeploy `line-bot`**（含本次 commit）
+2. 跑 `npm run setup-rich-menu`（四格選單 + 更新選單圖）
+3. 測試：
+   - 「建立提醒」精靈全流程
+   - 「開啟提醒」/「關閉提醒」
+   - 查詢提醒 → Flex「暫停重複」「跳過下次」
+   - 自然語言「明天早上 9 點開會」
+   - 閒聊應回「建立提醒失敗」；缺內容的自然語言應回具體提示
+4. （可選）更新 `assets/rich-menu.png` 四格設計
 
 ---
 
-## J. 關鍵檔案地圖
+## I. 關鍵檔案地圖
 
 ```
-src/services/commandParser.ts    # 規則解析
-src/services/commandResolver.ts  # hybrid → LLM
+src/services/commandParser.ts           # 規則解析（含開啟/關閉/建立提醒）
+src/services/commandResolver.ts         # hybrid → LLM（resolveLlmHybridResult）
 src/services/llmReminderParser.ts
-src/services/flexMessageBuilder.ts
-src/services/reminderService.ts  # 執行指令、Flex 列表、postback
+src/services/createReminderWizard.ts    # 建立提醒精靈
+src/services/reminderMessages.ts        # 回覆文案
+src/services/flexMessageBuilder.ts      # Flex + 暫停/跳過按鈕
+src/services/reminderService.ts         # 執行指令、postback、精靈路由
+src/repositories/notificationSettingsRepository.ts
+src/repositories/conversationSessionRepository.ts
+src/jobs/reminderScheduler.ts
 src/routes/lineWebhook.ts
-scripts/setup-rich-menu.ts       # Rich Menu（手動）
+scripts/setup-rich-menu.ts
 ```
 
 ---
 
-## K. 新對話開場白（複製貼上）
+## J. 新對話開場白（複製貼上）
 
-> 請先讀 `line-reminder-bot/docs/NEXT_SESSION.md` 和 `inwanding-infra/docs/NEXT_SESSION.md`，我們在 web-ubuntu 已 deploy line-bot，Rich Menu 可能還沒跑 setup-rich-menu。
+> 請先讀 `line-reminder-bot/docs/NEXT_SESSION.md`。我們已完成 Hybrid NLU 強化（LLM 僅建立提醒）、建立提醒精靈、開啟/關閉提醒、重複提醒暫停/跳過。待 redeploy 與重跑 setup-rich-menu（四格）。

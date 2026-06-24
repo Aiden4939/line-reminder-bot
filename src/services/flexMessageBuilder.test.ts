@@ -22,6 +22,8 @@ test("buildReminderListFlex returns carousel for multiple reminders", () => {
     recurrenceTime: null,
     recurrenceWeekday: null,
     recurrenceDayOfMonth: null,
+    isPaused: false,
+    skipNextOnce: false,
   }));
 
   const flex = buildReminderListFlex(reminders);
@@ -39,4 +41,54 @@ test("buildReminderListFlex returns carousel for multiple reminders", () => {
 test("buildReminderListOverflowText appears after carousel limit", () => {
   assert.equal(buildReminderListOverflowText(5), null);
   assert.match(buildReminderListOverflowText(15) ?? "", /前 12 筆/);
+});
+
+test("buildReminderListFlex includes recurring control buttons", () => {
+  const reminders: ReminderFlexItem[] = [
+    {
+      id: 9,
+      remindAt: new Date("2026-06-24T09:00:00+08:00"),
+      message: "喝水",
+      recurrenceType: "daily",
+      recurrenceTime: "09:00",
+      recurrenceWeekday: null,
+      recurrenceDayOfMonth: null,
+      isPaused: false,
+      skipNextOnce: false,
+    },
+  ];
+
+  const flex = buildReminderListFlex(reminders);
+  assert.ok(flex);
+  if (flex?.contents.type === "bubble") {
+    const labels = flex.contents.footer?.contents
+      .filter((item) => item.type === "button")
+      .map((item) => (item.type === "button" ? item.action.label : ""));
+    assert.deepEqual(labels, ["取消提醒", "暫停重複", "跳過下次"]);
+  }
+});
+
+test("buildReminderListFlex shows resume button for paused recurring", () => {
+  const reminders: ReminderFlexItem[] = [
+    {
+      id: 10,
+      remindAt: new Date("2026-06-24T09:00:00+08:00"),
+      message: "開會",
+      recurrenceType: "weekly",
+      recurrenceTime: "09:00",
+      recurrenceWeekday: 1,
+      recurrenceDayOfMonth: null,
+      isPaused: true,
+      skipNextOnce: false,
+    },
+  ];
+
+  const flex = buildReminderListFlex(reminders);
+  assert.ok(flex);
+  if (flex?.contents.type === "bubble") {
+    const labels = flex.contents.footer?.contents
+      .filter((item) => item.type === "button")
+      .map((item) => (item.type === "button" ? item.action.label : ""));
+    assert.deepEqual(labels, ["取消提醒", "恢復重複"]);
+  }
 });

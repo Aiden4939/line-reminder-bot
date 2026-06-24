@@ -9,7 +9,7 @@ process.env.DB_USER ||= "appuser";
 process.env.DB_PASSWORD ||= "devpassword";
 process.env.NLU_MODE = "rules";
 
-const { resolveCommand } = await import("./commandResolver.js");
+const { resolveCommand, resolveLlmHybridResult } = await import("./commandResolver.js");
 
 test("resolveCommand uses rules without OpenAI key", async () => {
   process.env.OPENAI_API_KEY = "";
@@ -34,4 +34,28 @@ test("resolveCommand hybrid without API key does not call LLM", async () => {
   if (cmd.type === "help") {
     assert.equal(cmd.reason, undefined);
   }
+});
+
+test("resolveLlmHybridResult preserves LLM validation help reasons", () => {
+  assert.deepEqual(
+    resolveLlmHybridResult({
+      type: "help",
+      reason: "missing_message",
+    }),
+    { type: "help", reason: "missing_message" }
+  );
+  assert.deepEqual(
+    resolveLlmHybridResult({
+      type: "help",
+      reason: "invalid_datetime_format",
+    }),
+    { type: "help", reason: "invalid_datetime_format" }
+  );
+});
+
+test("resolveLlmHybridResult maps unsupported LLM output to create_failed", () => {
+  assert.deepEqual(resolveLlmHybridResult(null), {
+    type: "help",
+    reason: "create_failed",
+  });
 });

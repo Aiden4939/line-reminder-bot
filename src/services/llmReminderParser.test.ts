@@ -42,3 +42,10 @@ test("mapLlmPayload accepts valid remind_at", () => {
     assert.ok(result.remindAt instanceof Date);
   }
 });
+
+test("mapLlmPayload rejects non-create actions", () => {
+  assert.equal(mapLlmPayload({ action: "list" }), null);
+  assert.equal(mapLlmPayload({ action: "cancel", cancel_id: 1 }), null);
+  assert.equal(mapLlmPayload({ action: "help" }), null);
+  assert.equal(mapLlmPayload({ action: "unsupported" }), null);
+});

@@ -8,7 +8,7 @@ process.env.DB_NAME ||= "line_reminder";
 process.env.DB_USER ||= "appuser";
 process.env.DB_PASSWORD ||= "devpassword";
 
-const { parseCommand } = await import("./commandParser.js");
+const { parseCommand, isInterruptingCommand } = await import("./commandParser.js");
 
 test("supports list aliases", () => {
   assert.deepEqual(parseCommand("查詢"), { type: "list" });
@@ -129,4 +129,16 @@ test("returns specific help reason for invalid recurring input", () => {
     type: "help",
     reason: "invalid_day_of_month",
   });
+});
+
+test("supports notification toggle and create wizard commands", () => {
+  assert.deepEqual(parseCommand("開啟提醒"), { type: "enableNotifications" });
+  assert.deepEqual(parseCommand("關閉提醒"), { type: "disableNotifications" });
+  assert.deepEqual(parseCommand("建立提醒"), { type: "startCreateWizard" });
+});
+
+test("isInterruptingCommand detects explicit commands only", () => {
+  assert.equal(isInterruptingCommand("查詢提醒"), true);
+  assert.equal(isInterruptingCommand("取消 3"), true);
+  assert.equal(isInterruptingCommand("隨便聊聊"), false);
 });

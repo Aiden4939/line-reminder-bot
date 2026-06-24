@@ -16,6 +16,8 @@ interface ReminderRow {
   recurrence_time: string | null;
   recurrence_weekday: number | null;
   recurrence_day_of_month: number | null;
+  is_paused: boolean;
+  skip_next_once: boolean;
   status: Reminder["status"];
   error_message: string | null;
   created_at: Date;
@@ -34,6 +36,8 @@ function mapRow(row: ReminderRow): Reminder {
     recurrenceTime: row.recurrence_time,
     recurrenceWeekday: row.recurrence_weekday,
     recurrenceDayOfMonth: row.recurrence_day_of_month,
+    isPaused: row.is_paused ?? false,
+    skipNextOnce: row.skip_next_once ?? false,
     status: row.status,
     errorMessage: row.error_message,
     createdAt: row.created_at,
@@ -73,7 +77,9 @@ export async function findPendingBySourceAndUser(
 ): Promise<Reminder[]> {
   const result = await pool.query<ReminderRow>(
     `SELECT * FROM reminders
-     WHERE source_type = $1 AND source_id = $2 AND user_id = $3 AND status = 'pending'
+     WHERE source_type = $1 AND source_id = $2 AND user_id = $3
+       AND status = 'pending'
+       AND (is_paused = false OR recurrence_type != 'none')
      ORDER BY remind_at ASC`,
     [sourceType, sourceId, userId]
   );
@@ -99,7 +105,7 @@ export async function cancelReminder(
 export async function findDueReminders(now: Date): Promise<Reminder[]> {
   const result = await pool.query<ReminderRow>(
     `SELECT * FROM reminders
-     WHERE status = 'pending' AND remind_at <= $1
+     WHERE status = 'pending' AND remind_at <= $1 AND is_paused = false
      ORDER BY remind_at ASC`,
     [now]
   );
@@ -110,7 +116,7 @@ export async function claimReminder(id: number): Promise<Reminder | null> {
   const result = await pool.query<ReminderRow>(
     `UPDATE reminders
      SET status = 'processing', updated_at = now()
-     WHERE id = $1 AND status = 'pending'
+     WHERE id = $1 AND status = 'pending' AND is_paused = false
      RETURNING *`,
     [id]
   );
@@ -128,8 +134,20 @@ export async function markSent(id: number): Promise<void> {
 
 export async function markRecurringNext(
   id: number,
-  nextRemindAt: Date
+  nextRemindAt: Date,
+  clearSkipNextOnce = false
 ): Promise<void> {
+  if (clearSkipNextOnce) {
+    await pool.query(
+      `UPDATE reminders
+       SET status = 'pending', remind_at = $2, skip_next_once = false,
+           updated_at = now(), error_message = NULL
+       WHERE id = $1 AND status = 'processing'`,
+      [id, nextRemindAt]
+    );
+    return;
+  }
+
   await pool.query(
     `UPDATE reminders
      SET status = 'pending', remind_at = $2, updated_at = now(), error_message = NULL
@@ -148,4 +166,70 @@ export async function markFailed(
      WHERE id = $1 AND status = 'processing'`,
     [id, errorMessage]
   );
+}
+
+export async function pauseRecurringReminder(
+  id: number,
+  sourceType: SourceType,
+  sourceId: string,
+  userId: string
+): Promise<Reminder | null> {
+  const result = await pool.query<ReminderRow>(
+    `UPDATE reminders
+     SET is_paused = true, updated_at = now()
+     WHERE id = $1 AND source_type = $2 AND source_id = $3 AND user_id = $4
+       AND status = 'pending' AND recurrence_type != 'none' AND is_paused = false
+     RETURNING *`,
+    [id, sourceType, sourceId, userId]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+export async function resumeRecurringReminder(
+  id: number,
+  sourceType: SourceType,
+  sourceId: string,
+  userId: string
+): Promise<Reminder | null> {
+  const result = await pool.query<ReminderRow>(
+    `UPDATE reminders
+     SET is_paused = false, updated_at = now()
+     WHERE id = $1 AND source_type = $2 AND source_id = $3 AND user_id = $4
+       AND status = 'pending' AND recurrence_type != 'none' AND is_paused = true
+     RETURNING *`,
+    [id, sourceType, sourceId, userId]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+export async function skipNextRecurringReminder(
+  id: number,
+  sourceType: SourceType,
+  sourceId: string,
+  userId: string
+): Promise<Reminder | null> {
+  const result = await pool.query<ReminderRow>(
+    `UPDATE reminders
+     SET skip_next_once = true, updated_at = now()
+     WHERE id = $1 AND source_type = $2 AND source_id = $3 AND user_id = $4
+       AND status = 'pending' AND recurrence_type != 'none'
+       AND is_paused = false AND skip_next_once = false
+     RETURNING *`,
+    [id, sourceType, sourceId, userId]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+export async function findReminderById(
+  id: number,
+  sourceType: SourceType,
+  sourceId: string,
+  userId: string
+): Promise<Reminder | null> {
+  const result = await pool.query<ReminderRow>(
+    `SELECT * FROM reminders
+     WHERE id = $1 AND source_type = $2 AND source_id = $3 AND user_id = $4`,
+    [id, sourceType, sourceId, userId]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
 }

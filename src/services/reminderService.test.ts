@@ -12,10 +12,12 @@ process.env.DB_PASSWORD ||= "devpassword";
 const {
   buildCreateSuccessMessage,
   buildReminderListMessages,
-  buildCancelNotFoundMessage,
-  buildCancelSuccessMessage,
   buildHelpMessage,
 } = await import("./reminderService.js");
+const {
+  buildCancelNotFoundMessage,
+  buildCancelSuccessMessage,
+} = await import("./reminderMessages.js");
 
 const oneShotReminder = {
   id: 3,
@@ -25,6 +27,8 @@ const oneShotReminder = {
   recurrenceTime: null,
   recurrenceWeekday: null,
   recurrenceDayOfMonth: null,
+  isPaused: false,
+  skipNextOnce: false,
 };
 
 test("buildCreateSuccessMessage includes next-step actions", () => {
@@ -88,6 +92,7 @@ test("buildCancelSuccessMessage distinguishes recurring reminders", () => {
 });
 
 test("buildHelpMessage returns targeted hints by reason", () => {
+  assert.equal(buildHelpMessage("create_failed"), "建立提醒失敗");
   assert.match(buildHelpMessage("invalid_datetime_format"), /時間格式錯誤/);
   assert.match(buildHelpMessage("missing_message"), /請補上提醒內容/);
   assert.match(buildHelpMessage("invalid_cancel_id"), /ID 必須是數字/);
