@@ -233,3 +233,40 @@ export async function findReminderById(
   );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
+
+export async function updateOnceReminderTime(
+  id: number,
+  sourceType: SourceType,
+  sourceId: string,
+  userId: string,
+  remindAt: Date
+): Promise<Reminder | null> {
+  const result = await pool.query<ReminderRow>(
+    `UPDATE reminders
+     SET remind_at = $5, updated_at = now()
+     WHERE id = $1 AND source_type = $2 AND source_id = $3 AND user_id = $4
+       AND status = 'pending' AND recurrence_type = 'none'
+     RETURNING *`,
+    [id, sourceType, sourceId, userId, remindAt]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+export async function updateRecurringReminderTime(
+  id: number,
+  sourceType: SourceType,
+  sourceId: string,
+  userId: string,
+  recurrenceTime: string,
+  remindAt: Date
+): Promise<Reminder | null> {
+  const result = await pool.query<ReminderRow>(
+    `UPDATE reminders
+     SET recurrence_time = $5, remind_at = $6, updated_at = now()
+     WHERE id = $1 AND source_type = $2 AND source_id = $3 AND user_id = $4
+       AND status = 'pending' AND recurrence_type != 'none'
+     RETURNING *`,
+    [id, sourceType, sourceId, userId, recurrenceTime, remindAt]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}

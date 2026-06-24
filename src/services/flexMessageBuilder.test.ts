@@ -9,9 +9,8 @@ process.env.DB_NAME ||= "line_reminder";
 process.env.DB_USER ||= "appuser";
 process.env.DB_PASSWORD ||= "devpassword";
 
-const { buildReminderListFlex, buildReminderListOverflowText } = await import(
-  "./flexMessageBuilder.js"
-);
+const { buildReminderListFlex, buildReminderListOverflowText, buildReminderFlex } =
+  await import("./flexMessageBuilder.js");
 
 test("buildReminderListFlex returns carousel for multiple reminders", () => {
   const reminders: ReminderFlexItem[] = [1, 2].map((id) => ({
@@ -64,7 +63,31 @@ test("buildReminderListFlex includes recurring control buttons", () => {
     const labels = flex.contents.footer?.contents
       .filter((item) => item.type === "button")
       .map((item) => (item.type === "button" ? item.action.label : ""));
-    assert.deepEqual(labels, ["取消提醒", "暫停重複", "跳過下次"]);
+    assert.deepEqual(labels, ["修改時間", "取消提醒", "暫停重複", "跳過下次"]);
+  }
+});
+
+test("buildReminderFlex returns single bubble with edit time button", () => {
+  const reminder: ReminderFlexItem = {
+    id: 3,
+    remindAt: new Date("2026-06-24T09:00:00+08:00"),
+    message: "開會",
+    recurrenceType: "none",
+    recurrenceTime: null,
+    recurrenceWeekday: null,
+    recurrenceDayOfMonth: null,
+    isPaused: false,
+    skipNextOnce: false,
+  };
+
+  const flex = buildReminderFlex(reminder);
+  assert.equal(flex.type, "flex");
+  assert.equal(flex.contents.type, "bubble");
+  if (flex.contents.type === "bubble") {
+    const labels = flex.contents.footer?.contents
+      .filter((item) => item.type === "button")
+      .map((item) => (item.type === "button" ? item.action.label : ""));
+    assert.deepEqual(labels, ["修改時間", "取消提醒"]);
   }
 });
 
@@ -89,6 +112,6 @@ test("buildReminderListFlex shows resume button for paused recurring", () => {
     const labels = flex.contents.footer?.contents
       .filter((item) => item.type === "button")
       .map((item) => (item.type === "button" ? item.action.label : ""));
-    assert.deepEqual(labels, ["取消提醒", "恢復重複"]);
+    assert.deepEqual(labels, ["修改時間", "取消提醒", "恢復重複"]);
   }
 });

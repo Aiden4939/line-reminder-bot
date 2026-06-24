@@ -27,6 +27,11 @@ import {
   buildReminderListFlex,
   buildReminderListOverflowText,
 } from "./flexMessageBuilder.js";
+import {
+  handleEditTimeRequest,
+  handleEditTimeSubmit,
+  replyCreateSuccess,
+} from "./editReminderTime.js";
 import type { LineMessage } from "./lineService.js";
 import * as lineService from "./lineService.js";
 import {
@@ -176,10 +181,7 @@ async function executeCommand(
         remindAt: command.remindAt,
       });
 
-      await lineService.replyMessage(
-        context.replyToken,
-        buildCreateSuccessMessage(reminder)
-      );
+      await replyCreateSuccess(context.replyToken, reminder);
       return;
     }
 
@@ -211,10 +213,7 @@ async function executeCommand(
         recurrenceDayOfMonth: command.dayOfMonth ?? null,
       });
 
-      await lineService.replyMessage(
-        context.replyToken,
-        buildCreateSuccessMessage(reminder)
-      );
+      await replyCreateSuccess(context.replyToken, reminder);
       return;
     }
 
@@ -445,6 +444,32 @@ export async function handlePostback(
         ? buildSkipNextSuccessMessage(id)
         : buildSkipNextNotFoundMessage(id)
     );
+    return;
+  }
+
+  if (action === "edit_time") {
+    const id = Number(urlParams.get("id"));
+    if (!Number.isInteger(id) || id <= 0) {
+      await lineService.replyMessage(
+        context.replyToken,
+        buildHelpMessage("invalid_cancel_id")
+      );
+      return;
+    }
+    await handleEditTimeRequest(id, context);
+    return;
+  }
+
+  if (action === "edit_time_submit") {
+    const id = Number(urlParams.get("id"));
+    if (!Number.isInteger(id) || id <= 0) {
+      await lineService.replyMessage(
+        context.replyToken,
+        buildHelpMessage("invalid_cancel_id")
+      );
+      return;
+    }
+    await handleEditTimeSubmit(id, params, context);
     return;
   }
 

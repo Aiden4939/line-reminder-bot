@@ -45,6 +45,11 @@ function postbackButton(
 function buildFooterButtons(reminder: ReminderFlexItem): FlexComponent[] {
   const buttons: FlexComponent[] = [
     postbackButton(
+      "修改時間",
+      `action=edit_time&id=${reminder.id}`,
+      `修改提醒 ${reminder.id} 時間`
+    ),
+    postbackButton(
       "取消提醒",
       `action=cancel&id=${reminder.id}`,
       `取消提醒 ${reminder.id}`
@@ -161,6 +166,16 @@ export function buildReminderListFlex(
     type: "flex",
     altText: `待發送提醒 ${reminders.length} 筆`,
     contents,
+  };
+}
+
+export function buildReminderFlex(
+  reminder: ReminderFlexItem
+): FlexMessage {
+  return {
+    type: "flex",
+    altText: `提醒 #${reminder.id}：${reminder.message}`,
+    contents: buildBubble(reminder),
   };
 }
 

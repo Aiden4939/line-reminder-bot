@@ -17,7 +17,7 @@ import {
   parseTime,
   type RecurrenceRule,
 } from "../utils/recurrence.js";
-import { buildCreateSuccessMessage } from "./reminderMessages.js";
+import { resolveQuickPickDatetime, replyCreateSuccess } from "./editReminderTime.js";
 import * as lineService from "./lineService.js";
 
 type FlexMessage = messagingApi.FlexMessage;
@@ -231,6 +231,40 @@ function buildTimeFlex(): FlexMessage {
   };
 }
 
+function datetimeQuickReply(): QuickReply {
+  return {
+    items: [
+      {
+        type: "action",
+        action: {
+          type: "postback",
+          label: "30分鐘後",
+          data: "wizard=quick&value=30m",
+          displayText: "30分鐘後",
+        },
+      },
+      {
+        type: "action",
+        action: {
+          type: "postback",
+          label: "1小時後",
+          data: "wizard=quick&value=1h",
+          displayText: "1小時後",
+        },
+      },
+      {
+        type: "action",
+        action: {
+          type: "postback",
+          label: "明天 09:00",
+          data: "wizard=quick&value=tomorrow9",
+          displayText: "明天 09:00",
+        },
+      },
+    ],
+  };
+}
+
 function weekdayQuickReply(): QuickReply {
   const labels = ["一", "二", "三", "四", "五", "六", "日"];
   return {
@@ -299,7 +333,14 @@ async function replyStep(
       await lineService.replyMessages(replyToken, [buildRecurrenceFlex()]);
       return;
     case "pickDatetime":
-      await lineService.replyMessages(replyToken, [buildDatetimeFlex()]);
+      await lineService.replyMessages(replyToken, [
+        buildDatetimeFlex(),
+        {
+          type: "text",
+          text: "或選擇快捷時間：",
+          quickReply: datetimeQuickReply(),
+        },
+      ]);
       return;
     case "pickTime":
       await lineService.replyMessages(replyToken, [buildTimeFlex()]);
@@ -407,10 +448,7 @@ async function finalizeWizard(
       context.sourceId,
       context.userId
     );
-    await lineService.replyMessage(
-      context.replyToken,
-      buildCreateSuccessMessage(reminder)
-    );
+    await replyCreateSuccess(context.replyToken, reminder);
     return;
   }
 
@@ -451,10 +489,7 @@ async function finalizeWizard(
       context.sourceId,
       context.userId
     );
-    await lineService.replyMessage(
-      context.replyToken,
-      buildCreateSuccessMessage(reminder)
-    );
+    await replyCreateSuccess(context.replyToken, reminder);
     return;
   }
 
@@ -649,6 +684,35 @@ export async function handleWizardPostback(
 
   if (wizard === "datetime" && params.datetime) {
     draft.remindAt = params.datetime;
+    await conversationSessionRepository.upsertSession(
+      context.sourceType,
+      context.sourceId,
+      context.userId,
+      "enterMessage",
+      draft
+    );
+    await replyStep(context.replyToken, "enterMessage");
+    return true;
+  }
+
+  if (wizard === "quick") {
+    const value = urlParams.get("value");
+    if (!value || session.step !== "pickDatetime") {
+      await lineService.replyMessage(
+        context.replyToken,
+        "無法識別的選項，請重新輸入「建立提醒」。"
+      );
+      return true;
+    }
+    const datetime = resolveQuickPickDatetime(value);
+    if (!datetime) {
+      await lineService.replyMessage(
+        context.replyToken,
+        "快捷時間設定失敗，請重新選擇。"
+      );
+      return true;
+    }
+    draft.remindAt = datetime;
     await conversationSessionRepository.upsertSession(
       context.sourceType,
       context.sourceId,
