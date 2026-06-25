@@ -97,5 +97,6 @@ test("buildHelpMessage returns targeted hints by reason", () => {
   assert.match(buildHelpMessage("invalid_cancel_id"), /ID 必須是數字/);
   assert.match(buildHelpMessage("invalid_recurring_time_format"), /HH:mm/);
   assert.match(buildHelpMessage("invalid_weekday"), /星期格式錯誤/);
+  assert.match(buildHelpMessage("ambiguous_recurrence"), /一次性還是重複提醒/);
   assert.match(buildHelpMessage(), /提醒 Bot 使用說明/);
 });

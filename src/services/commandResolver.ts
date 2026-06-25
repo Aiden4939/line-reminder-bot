@@ -7,7 +7,8 @@ export function resolveLlmHybridResult(
 ): ParsedCommand {
   if (
     llmCommand?.type === "create" ||
-    llmCommand?.type === "createRecurring"
+    llmCommand?.type === "createRecurring" ||
+    llmCommand?.type === "confirmAmbiguousCreate"
   ) {
     return llmCommand;
   }

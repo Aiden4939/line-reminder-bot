@@ -35,7 +35,8 @@ export type CreateReminderWizardStep =
   | "pickDayOfMonth"
   | "pickDatetime"
   | "pickTime"
-  | "enterMessage";
+  | "enterMessage"
+  | "confirmAmbiguousIntent";
 
 export interface CreateReminderDraft {
   kind?: "once" | "recurring";
@@ -44,6 +45,12 @@ export interface CreateReminderDraft {
   dayOfMonth?: number;
   remindAt?: string;
   time?: string;
+  ambiguousMessage?: string;
+  ambiguousOnceRemindAt?: string;
+  ambiguousRecurrenceType?: "daily" | "weekly" | "monthly";
+  ambiguousRecurrenceTime?: string;
+  ambiguousRecurrenceWeekday?: number;
+  ambiguousRecurrenceDayOfMonth?: number;
 }
 
 export interface ConversationSession {

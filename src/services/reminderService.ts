@@ -76,6 +76,112 @@ function formatListLine(reminder: ReminderListItem): string {
 
 export { buildCreateSuccessMessage } from "./reminderMessages.js";
 
+async function handleAmbiguousChoice(
+  choice: "once" | "recurring",
+  context: MessageContext
+): Promise<boolean> {
+  const session = await conversationSessionRepository.findActiveSession(
+    context.sourceType,
+    context.sourceId,
+    context.userId
+  );
+  if (!session || session.step !== "confirmAmbiguousIntent") {
+    await lineService.replyMessage(
+      context.replyToken,
+      "確認已過期，請重新輸入提醒內容。"
+    );
+    return true;
+  }
+
+  const draft = session.draft;
+  const message = draft.ambiguousMessage?.trim();
+  if (!message) {
+    await conversationSessionRepository.deleteSession(
+      context.sourceType,
+      context.sourceId,
+      context.userId
+    );
+    await lineService.replyMessage(
+      context.replyToken,
+      "確認資料遺失，請重新輸入提醒內容。"
+    );
+    return true;
+  }
+
+  if (choice === "once") {
+    if (!draft.ambiguousOnceRemindAt) {
+      await lineService.replyMessage(
+        context.replyToken,
+        "這則提醒目前無法建立一次性時間，請改用「下週一 09:00 提醒我 ...」格式。"
+      );
+      return true;
+    }
+    const remindAt = new Date(draft.ambiguousOnceRemindAt);
+    if (Number.isNaN(remindAt.getTime()) || remindAt <= new Date()) {
+      await lineService.replyMessage(
+        context.replyToken,
+        "一次性提醒時間無效或已過期，請重新輸入提醒內容。"
+      );
+      await conversationSessionRepository.deleteSession(
+        context.sourceType,
+        context.sourceId,
+        context.userId
+      );
+      return true;
+    }
+    const reminder = await reminderRepository.createReminder({
+      sourceType: context.sourceType,
+      sourceId: context.sourceId,
+      userId: context.userId,
+      message,
+      remindAt,
+    });
+    await conversationSessionRepository.deleteSession(
+      context.sourceType,
+      context.sourceId,
+      context.userId
+    );
+    await replyCreateSuccess(context.replyToken, reminder);
+    return true;
+  }
+
+  const recurrenceType = draft.ambiguousRecurrenceType;
+  const recurrenceTime = draft.ambiguousRecurrenceTime;
+  if (!recurrenceType || !recurrenceTime) {
+    await lineService.replyMessage(
+      context.replyToken,
+      "這則提醒目前無法直接建立重複提醒，請改寫成例如「每週一 09:00 提醒我 ...」。"
+    );
+    return true;
+  }
+
+  const rule: RecurrenceRule = {
+    recurrenceType,
+    time: recurrenceTime,
+    weekday: draft.ambiguousRecurrenceWeekday,
+    dayOfMonth: draft.ambiguousRecurrenceDayOfMonth,
+  };
+  const remindAt = computeFirstRemindAt(new Date(), rule);
+  const reminder = await reminderRepository.createReminder({
+    sourceType: context.sourceType,
+    sourceId: context.sourceId,
+    userId: context.userId,
+    message,
+    remindAt,
+    recurrenceType,
+    recurrenceTime,
+    recurrenceWeekday: draft.ambiguousRecurrenceWeekday ?? null,
+    recurrenceDayOfMonth: draft.ambiguousRecurrenceDayOfMonth ?? null,
+  });
+  await conversationSessionRepository.deleteSession(
+    context.sourceType,
+    context.sourceId,
+    context.userId
+  );
+  await replyCreateSuccess(context.replyToken, reminder);
+  return true;
+}
+
 export function buildReminderListMessages(
   reminders: ReminderListItem[]
 ): string[] {
@@ -105,6 +211,7 @@ export function buildHelpMessage(
     | "invalid_weekday"
     | "invalid_day_of_month"
     | "missing_recurring_message"
+    | "ambiguous_recurrence"
     | "explicit_help"
     | "create_failed"
 ): string {
@@ -131,6 +238,9 @@ export function buildHelpMessage(
   }
   if (reason === "missing_recurring_message") {
     return "請補上提醒內容。\n例如：每天 09:00 喝水";
+  }
+  if (reason === "ambiguous_recurrence") {
+    return "我不確定你是要一次性還是重複提醒。\n請改寫成其中一種：\n1) 一次性：下週一 09:00 提醒我 測試\n2) 重複：每週一 09:00 提醒我 測試";
   }
   return HELP_MESSAGE;
 }
@@ -214,6 +324,67 @@ async function executeCommand(
       });
 
       await replyCreateSuccess(context.replyToken, reminder);
+      return;
+    }
+
+    case "confirmAmbiguousCreate": {
+      const quickReplyItems: NonNullable<
+        NonNullable<LineMessage["quickReply"]>["items"]
+      > = [];
+
+      if (command.onceRemindAt) {
+        quickReplyItems.push({
+          type: "action",
+          action: {
+            type: "postback",
+            label: "一次性",
+            data: "action=confirm_ambiguous&value=once",
+            displayText: "一次性提醒",
+          },
+        });
+      }
+      if (command.recurringOption) {
+        quickReplyItems.push({
+          type: "action",
+          action: {
+            type: "postback",
+            label: "重複",
+            data: "action=confirm_ambiguous&value=recurring",
+            displayText: "重複提醒",
+          },
+        });
+      }
+
+      await conversationSessionRepository.upsertSession(
+        context.sourceType,
+        context.sourceId,
+        context.userId,
+        "confirmAmbiguousIntent",
+        {
+          ambiguousMessage: command.message,
+          ambiguousOnceRemindAt: command.onceRemindAt?.toISOString(),
+          ambiguousRecurrenceType: command.recurringOption?.recurrenceType,
+          ambiguousRecurrenceTime: command.recurringOption?.time,
+          ambiguousRecurrenceWeekday: command.recurringOption?.weekday,
+          ambiguousRecurrenceDayOfMonth: command.recurringOption?.dayOfMonth,
+        }
+      );
+
+      if (quickReplyItems.length === 0) {
+        await lineService.replyMessage(
+          context.replyToken,
+          buildHelpMessage("ambiguous_recurrence")
+        );
+        return;
+      }
+
+      await lineService.replyMessages(context.replyToken, [
+        {
+          type: "text",
+          text: "我不確定你要一次性還是重複提醒，請直接點選：",
+          quickReply: { items: quickReplyItems },
+        },
+      ]);
       return;
     }
 
@@ -352,10 +523,23 @@ export async function handlePostback(
     return;
   }
 
-  await clearWizardSession(context);
-
   const urlParams = new URLSearchParams(data);
   const action = urlParams.get("action");
+
+  if (action === "confirm_ambiguous") {
+    const value = urlParams.get("value");
+    if (value === "once" || value === "recurring") {
+      await handleAmbiguousChoice(value, context);
+      return;
+    }
+    await lineService.replyMessage(
+      context.replyToken,
+      "無法識別的確認選項，請重新輸入提醒內容。"
+    );
+    return;
+  }
+
+  await clearWizardSession(context);
 
   if (action === "help") {
     await lineService.replyMessage(context.replyToken, HELP_MESSAGE);

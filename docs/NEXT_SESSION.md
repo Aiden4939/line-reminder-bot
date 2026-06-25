@@ -1,7 +1,7 @@
 # 下次對話接手指南（NEXT_SESSION）
 
 > **用途：** 換裝置、新開 Cursor 對話時先讀本檔。  
-> **最後更新：** 2026-06-24  
+> **最後更新：** 2026-06-25  
 > **Repo：** https://github.com/Aiden4939/line-reminder-bot  
 > **Infra：** https://github.com/Aiden4939/inwanding-infra（`line-bot` service）
 
@@ -16,6 +16,23 @@ LINE 提醒 Bot：文字指令建立 / 查詢 / 取消提醒，到期 push 通�
 ---
 
 ## B. 2026-06-24 已完成（待 redeploy）
+
+## B1. 2026-06-25 已完成（待 redeploy）
+
+### 功能
+
+| 功能 | 說明 | 關鍵檔案 |
+|------|------|----------|
+| **模糊語意確認（Quick Reply）** | LLM 回 `intent=ambiguous` 時不直接建單，改回「一次性 / 重複」按鈕讓使用者確認；點選後直接建立提醒 | `llmReminderParser.ts`, `reminderService.ts` |
+| **NLU 輸出擴充** | LLM JSON 新增 `intent` + `confidence`，支援 `confirmAmbiguousCreate` 指令 | `llmReminderParser.ts`, `commandParser.ts`, `commandResolver.ts` |
+| **Session 暫存候選提醒** | 以既有 `conversation_sessions` 保存模糊候選（一次性時間、重複規則）供 postback 建立使用，無需新增 schema | `types/reminder.ts`, `conversationSessionRepository.ts` |
+
+### 測試
+
+- `npm test`：55 項全過
+- `npm run build`：通過
+
+---
 
 ### 功能
 

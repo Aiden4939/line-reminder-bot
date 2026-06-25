@@ -10,6 +10,8 @@ import { createOpenAiClient } from "./openaiClient.js";
 
 interface LlmReminderPayload {
   action?: string;
+  intent?: string;
+  confidence?: number;
   message?: string;
   remind_at?: string;
   minutes_from_now?: number;
@@ -69,14 +71,83 @@ function parseRemindAt(payload: LlmReminderPayload): Date | null {
   return null;
 }
 
-export function mapLlmPayload(payload: LlmReminderPayload): ParsedCommand | null {
+function parseRecurringOption(payload: LlmReminderPayload): {
+  recurrenceType: "daily" | "weekly" | "monthly";
+  time: string;
+  weekday?: number;
+  dayOfMonth?: number;
+} | null {
+  const recurrenceType = payload.recurrence_type?.trim().toLowerCase();
+  if (
+    recurrenceType !== "daily" &&
+    recurrenceType !== "weekly" &&
+    recurrenceType !== "monthly"
+  ) {
+    return null;
+  }
+  const time = payload.time ? parseTime(payload.time) : null;
+  if (!time) {
+    return null;
+  }
+  if (recurrenceType === "weekly") {
+    const weekday =
+      typeof payload.weekday === "number"
+        ? payload.weekday >= 1 && payload.weekday <= 7
+          ? payload.weekday
+          : null
+        : typeof payload.weekday === "string"
+          ? parseWeekday(payload.weekday)
+          : null;
+    if (!weekday) {
+      return null;
+    }
+    return { recurrenceType: "weekly", time, weekday };
+  }
+  if (recurrenceType === "monthly") {
+    const dayOfMonth =
+      typeof payload.day_of_month === "number"
+        ? parseDayOfMonth(String(payload.day_of_month))
+        : null;
+    if (!dayOfMonth) {
+      return null;
+    }
+    return { recurrenceType: "monthly", time, dayOfMonth };
+  }
+  return { recurrenceType: "daily", time };
+}
+
+export function mapLlmPayload(
+  payload: LlmReminderPayload,
+  _originalText = ""
+): ParsedCommand | null {
   const action = payload.action?.trim().toLowerCase();
+  const intent = payload.intent?.trim().toLowerCase();
+  const confidence =
+    typeof payload.confidence === "number" ? payload.confidence : null;
   if (!action) {
     return null;
   }
 
   if (action === "unsupported" || action === "help" || action === "list" || action === "cancel") {
     return null;
+  }
+
+  if (intent === "ambiguous") {
+    const message = payload.message?.trim();
+    if (!message) {
+      return { type: "help", reason: "missing_message" };
+    }
+    const onceRemindAt = parseRemindAt(payload) ?? undefined;
+    const recurringOption = parseRecurringOption(payload) ?? undefined;
+    if (!onceRemindAt && !recurringOption) {
+      return { type: "help", reason: "ambiguous_recurrence" };
+    }
+    return {
+      type: "confirmAmbiguousCreate",
+      message,
+      onceRemindAt,
+      recurringOption,
+    };
   }
 
   if (action === "create") {
@@ -97,62 +168,24 @@ export function mapLlmPayload(payload: LlmReminderPayload): ParsedCommand | null
       return { type: "help", reason: "missing_recurring_message" };
     }
 
-    const recurrenceType = payload.recurrence_type?.trim().toLowerCase();
-    if (
-      recurrenceType !== "daily" &&
-      recurrenceType !== "weekly" &&
-      recurrenceType !== "monthly"
-    ) {
+    if (intent === "create" && confidence !== null && confidence >= 0.6) {
+      const remindAt = parseRemindAt(payload);
+      if (!remindAt) {
+        return { type: "help", reason: "invalid_datetime_format" };
+      }
+      return { type: "create", remindAt, message };
+    }
+
+    const recurringOption = parseRecurringOption(payload);
+    if (!recurringOption) {
       return { type: "help", reason: "invalid_recurring_time_format" };
     }
-
-    const time = payload.time ? parseTime(payload.time) : null;
-    if (!time) {
-      return { type: "help", reason: "invalid_recurring_time_format" };
-    }
-
-    if (recurrenceType === "weekly") {
-      const weekday =
-        typeof payload.weekday === "number"
-          ? payload.weekday >= 1 && payload.weekday <= 7
-            ? payload.weekday
-            : null
-          : typeof payload.weekday === "string"
-            ? parseWeekday(payload.weekday)
-            : null;
-      if (!weekday) {
-        return { type: "help", reason: "invalid_weekday" };
-      }
-      return {
-        type: "createRecurring",
-        recurrenceType: "weekly",
-        time,
-        weekday,
-        message,
-      };
-    }
-
-    if (recurrenceType === "monthly") {
-      const dayOfMonth =
-        typeof payload.day_of_month === "number"
-          ? parseDayOfMonth(String(payload.day_of_month))
-          : null;
-      if (!dayOfMonth) {
-        return { type: "help", reason: "invalid_day_of_month" };
-      }
-      return {
-        type: "createRecurring",
-        recurrenceType: "monthly",
-        time,
-        dayOfMonth,
-        message,
-      };
-    }
-
     return {
       type: "createRecurring",
-      recurrenceType: "daily",
-      time,
+      recurrenceType: recurringOption.recurrenceType,
+      time: recurringOption.time,
+      weekday: recurringOption.weekday,
+      dayOfMonth: recurringOption.dayOfMonth,
       message,
     };
   }
@@ -182,6 +215,8 @@ export async function parseCommandWithLlm(
             "",
             "JSON 格式：",
             '{"action":"create|create_recurring|unsupported",',
+            '"intent":"create|create_recurring|ambiguous",',
+            '"confidence":0到1的小數（對 intent 的信心）',
             '"message":"提醒內容（create 必填）",',
             '"remind_at":"YYYY-MM-DD HH:mm 或 ISO8601（一次性提醒，hour 0-23、minute 0-59）",',
             '"minutes_from_now":數字,',
@@ -194,7 +229,12 @@ export async function parseCommandWithLlm(
             "規則：",
             "- 僅處理建立一次性或重複提醒",
             "- 查詢、取消、說明、閒聊、無法判斷 → action=unsupported",
+            "- 先判斷 intent：一次性(create)、重複(create_recurring)、或模糊(ambiguous)",
+            "- 文字可能有口語變體，不可只靠固定關鍵字；若無法確定是否重複，intent 必須回 ambiguous",
+            "- 下週一/下禮拜一/這週五/明天/後天通常是一次性，除非語意明確表示每週重複",
             "- 明天早上九點開會 → action=create, message=開會, remind_at=推算後的 YYYY-MM-DD HH:mm",
+            "- 下禮拜一提醒我要測試（無法判斷是一次或每週）→ intent=ambiguous",
+            "- 每個禮拜一提醒我要測試 → intent=create_recurring, action=create_recurring, recurrence_type=weekly, weekday=1",
             "- 兩小時後喝水 → action=create, hours_from_now=2, message=喝水",
             "- 每天九點喝水 → action=create_recurring, recurrence_type=daily, time=09:00, message=喝水",
           ].join("\n"),
@@ -212,7 +252,7 @@ export async function parseCommandWithLlm(
 
     try {
       const payload = JSON.parse(content) as LlmReminderPayload;
-      return mapLlmPayload(payload);
+      return mapLlmPayload(payload, text);
     } catch (error) {
       console.warn("[nlu] Failed to parse LLM JSON:", error);
       return null;

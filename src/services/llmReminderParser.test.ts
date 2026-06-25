@@ -49,3 +49,45 @@ test("mapLlmPayload rejects non-create actions", () => {
   assert.equal(mapLlmPayload({ action: "help" }), null);
   assert.equal(mapLlmPayload({ action: "unsupported" }), null);
 });
+
+test("mapLlmPayload returns ambiguous help when intent is ambiguous", () => {
+  const result = mapLlmPayload(
+    {
+      action: "create",
+      intent: "ambiguous",
+      remind_at: "2026-06-29 09:00",
+      message: "測試",
+    }
+  );
+  assert.equal(result?.type, "confirmAmbiguousCreate");
+  if (result?.type === "confirmAmbiguousCreate") {
+    assert.equal(result.message, "測試");
+  }
+});
+
+test("mapLlmPayload keeps recurring reminder for recurring intent", () => {
+  const result = mapLlmPayload(
+    {
+      action: "create_recurring",
+      intent: "create_recurring",
+      recurrence_type: "weekly",
+      time: "09:00",
+      weekday: 1,
+      message: "測試",
+    }
+  );
+  assert.equal(result?.type, "createRecurring");
+});
+
+test("mapLlmPayload converts to one-time when intent is create with confidence", () => {
+  const result = mapLlmPayload(
+    {
+      action: "create_recurring",
+      intent: "create",
+      confidence: 0.9,
+      remind_at: "2026-06-29 09:00",
+      message: "測試",
+    }
+  );
+  assert.equal(result?.type, "create");
+});
