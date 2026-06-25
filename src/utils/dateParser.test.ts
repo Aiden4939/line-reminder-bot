@@ -9,9 +9,8 @@ process.env.DB_USER ||= "appuser";
 process.env.DB_PASSWORD ||= "devpassword";
 process.env.TZ = "Asia/Taipei";
 
-const { parseAbsoluteDateTime, truncateToMinute } = await import(
-  "./dateParser.js"
-);
+const { parseAbsoluteDateTime, truncateToMinute, formatReminderPushDateTime } =
+  await import("./dateParser.js");
 
 test("parseAbsoluteDateTime rejects hour 24 and 25", () => {
   assert.equal(parseAbsoluteDateTime("2026-06-24 24:30"), null);
@@ -38,4 +37,21 @@ test("truncateToMinute does not throw on valid date", () => {
   assert.ok(parsed);
   const truncated = truncateToMinute(parsed!);
   assert.ok(truncated);
+});
+
+test("formatReminderPushDateTime uses relative labels for one-shot reminders", () => {
+  const now = parseAbsoluteDateTime("2026-06-25 10:00");
+  assert.ok(now);
+
+  const today = parseAbsoluteDateTime("2026-06-25 14:30");
+  assert.ok(today);
+  assert.equal(formatReminderPushDateTime(today, now), "今天 14:30");
+
+  const tomorrow = parseAbsoluteDateTime("2026-06-26 09:00");
+  assert.ok(tomorrow);
+  assert.equal(formatReminderPushDateTime(tomorrow, now), "明天 09:00");
+
+  const later = parseAbsoluteDateTime("2026-07-01 09:00");
+  assert.ok(later);
+  assert.equal(formatReminderPushDateTime(later, now), "7/1 09:00");
 });

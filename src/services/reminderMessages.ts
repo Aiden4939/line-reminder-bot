@@ -1,5 +1,5 @@
 import type { Reminder } from "../types/reminder.js";
-import { formatDateTime } from "../utils/dateParser.js";
+import { formatDateTime, formatReminderPushDateTime } from "../utils/dateParser.js";
 import {
   formatRecurrenceSchedule,
   formatRecurrenceTypeLabel,
@@ -15,6 +15,16 @@ type ReminderListItem = Pick<
   | "recurrenceWeekday"
   | "recurrenceDayOfMonth"
 >;
+
+export function buildReminderPushMessage(
+  reminder: ReminderListItem,
+  now: Date = new Date()
+): string {
+  const schedule = formatRecurrenceSchedule(reminder);
+  const secondLine =
+    schedule ?? formatReminderPushDateTime(reminder.remindAt, now);
+  return `${reminder.message}\n${secondLine}`;
+}
 
 export function buildCreateSuccessMessage(reminder: ReminderListItem): string {
   const schedule = formatRecurrenceSchedule(reminder);

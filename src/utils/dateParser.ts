@@ -165,3 +165,80 @@ export function formatDateTime(date: Date): string {
     hour12: false,
   }).format(date);
 }
+
+function getTzDateTimeParts(date: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: env.tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const normalized = normalizeClockParts(
+    get("year"),
+    get("month"),
+    get("day"),
+    get("hour"),
+    get("minute")
+  );
+  if (normalized) {
+    return normalized;
+  }
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+  };
+}
+
+function calendarDayKey(
+  parts: Pick<ReturnType<typeof getTzDateTimeParts>, "year" | "month" | "day">
+): string {
+  return `${parts.year}-${padDatePart(parts.month)}-${padDatePart(parts.day)}`;
+}
+
+function getCalendarDayDiff(
+  remindParts: Pick<ReturnType<typeof getTzDateTimeParts>, "year" | "month" | "day">,
+  nowParts: Pick<ReturnType<typeof getTzDateTimeParts>, "year" | "month" | "day">
+): number | null {
+  const remindDayStart = parseAbsoluteDateTime(`${calendarDayKey(remindParts)} 00:00`);
+  const nowDayStart = parseAbsoluteDateTime(`${calendarDayKey(nowParts)} 00:00`);
+  if (!remindDayStart || !nowDayStart) {
+    return null;
+  }
+  return Math.round(
+    (remindDayStart.getTime() - nowDayStart.getTime()) / (24 * 60 * 60 * 1000)
+  );
+}
+
+/** 極簡 push 用：今天 / 明天 / M/D HH:mm */
+export function formatReminderPushDateTime(
+  remindAt: Date,
+  now: Date = new Date()
+): string {
+  const remindParts = getTzDateTimeParts(remindAt);
+  const nowParts = getTzDateTimeParts(now);
+  const time = `${padDatePart(remindParts.hour)}:${padDatePart(remindParts.minute)}`;
+  const dayDiff = getCalendarDayDiff(remindParts, nowParts);
+
+  if (dayDiff === 0) {
+    return `今天 ${time}`;
+  }
+  if (dayDiff === 1) {
+    return `明天 ${time}`;
+  }
+
+  return `${remindParts.month}/${remindParts.day} ${time}`;
+}

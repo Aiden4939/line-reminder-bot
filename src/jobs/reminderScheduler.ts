@@ -3,12 +3,9 @@ import { env } from "../config/env.js";
 import * as notificationSettingsRepository from "../repositories/notificationSettingsRepository.js";
 import * as reminderRepository from "../repositories/reminderRepository.js";
 import * as lineService from "../services/lineService.js";
+import { buildReminderPushMessage } from "../services/reminderMessages.js";
 import { formatDateTime } from "../utils/dateParser.js";
-import {
-  computeNextRemindAt,
-  formatRecurrenceTypeLabel,
-  toRecurrenceRule,
-} from "../utils/recurrence.js";
+import { computeNextRemindAt, toRecurrenceRule } from "../utils/recurrence.js";
 
 let task: cron.ScheduledTask | null = null;
 
@@ -43,11 +40,7 @@ export async function processDueReminders(): Promise<void> {
     const clearSkipNextOnce = claimed.skipNextOnce;
 
     if (shouldPush) {
-      const recurrenceLabel = formatRecurrenceTypeLabel(claimed.recurrenceType);
-      const recurrenceSuffix = recurrenceLabel
-        ? `（${recurrenceLabel}重複）`
-        : "";
-      const pushText = `提醒時間到！${recurrenceSuffix}\n#${claimed.id} | ${formatDateTime(claimed.remindAt)}\n${claimed.message}`;
+      const pushText = buildReminderPushMessage(claimed, now);
 
       try {
         await lineService.pushReminder(
