@@ -43,6 +43,18 @@ test("mapLlmPayload accepts valid remind_at", () => {
   }
 });
 
+test("mapLlmPayload preserves numbered message prefix", () => {
+  const result = mapLlmPayload({
+    action: "create",
+    message: "4.要上課",
+    remind_at: "2026-06-24 15:00",
+  });
+  assert.equal(result?.type, "create");
+  if (result?.type === "create") {
+    assert.equal(result.message, "4.要上課");
+  }
+});
+
 test("mapLlmPayload rejects non-create actions", () => {
   assert.equal(mapLlmPayload({ action: "list" }), null);
   assert.equal(mapLlmPayload({ action: "cancel", cancel_id: 1 }), null);
