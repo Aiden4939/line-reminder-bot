@@ -11,6 +11,7 @@ import {
 
 export type ParsedCommand =
   | { type: "create"; remindAt: Date; message: string }
+  | { type: "collectTimeForCreate"; remindDate: string; message: string }
   | {
       type: "confirmAmbiguousCreate";
       message: string;
@@ -26,6 +27,13 @@ export type ParsedCommand =
       type: "createRecurring";
       recurrenceType: "daily" | "weekly" | "monthly";
       time: string;
+      weekday?: number;
+      dayOfMonth?: number;
+      message: string;
+    }
+  | {
+      type: "collectTimeForRecurring";
+      recurrenceType: "daily" | "weekly" | "monthly";
       weekday?: number;
       dayOfMonth?: number;
       message: string;

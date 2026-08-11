@@ -55,6 +55,23 @@ test("mapLlmPayload preserves numbered message prefix", () => {
   }
 });
 
+test("mapLlmPayload collects time for one-shot reminder with date only", () => {
+  assert.deepEqual(
+    mapLlmPayload({
+      action: "create",
+      intent: "create",
+      needs_time: true,
+      remind_at: "2026-06-29",
+      message: "洗衣服",
+    }),
+    {
+      type: "collectTimeForCreate",
+      remindDate: "2026-06-29",
+      message: "洗衣服",
+    }
+  );
+});
+
 test("mapLlmPayload rejects non-create actions", () => {
   assert.equal(mapLlmPayload({ action: "list" }), null);
   assert.equal(mapLlmPayload({ action: "cancel", cancel_id: 1 }), null);
@@ -89,6 +106,26 @@ test("mapLlmPayload keeps recurring reminder for recurring intent", () => {
     }
   );
   assert.equal(result?.type, "createRecurring");
+});
+
+test("mapLlmPayload collects time for recurring reminder without time", () => {
+  assert.deepEqual(
+    mapLlmPayload({
+      action: "create_recurring",
+      intent: "create_recurring",
+      needs_time: true,
+      recurrence_type: "weekly",
+      weekday: 1,
+      message: "洗衣服",
+    }),
+    {
+      type: "collectTimeForRecurring",
+      recurrenceType: "weekly",
+      weekday: 1,
+      dayOfMonth: undefined,
+      message: "洗衣服",
+    }
+  );
 });
 
 test("mapLlmPayload converts to one-time when intent is create with confidence", () => {

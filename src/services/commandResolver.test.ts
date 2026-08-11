@@ -53,6 +53,36 @@ test("resolveLlmHybridResult preserves LLM validation help reasons", () => {
   );
 });
 
+test("resolveLlmHybridResult preserves collect-time commands", () => {
+  assert.deepEqual(
+    resolveLlmHybridResult({
+      type: "collectTimeForCreate",
+      remindDate: "2026-06-29",
+      message: "洗衣服",
+    }),
+    {
+      type: "collectTimeForCreate",
+      remindDate: "2026-06-29",
+      message: "洗衣服",
+    }
+  );
+
+  assert.deepEqual(
+    resolveLlmHybridResult({
+      type: "collectTimeForRecurring",
+      recurrenceType: "weekly",
+      weekday: 1,
+      message: "洗衣服",
+    }),
+    {
+      type: "collectTimeForRecurring",
+      recurrenceType: "weekly",
+      weekday: 1,
+      message: "洗衣服",
+    }
+  );
+});
+
 test("resolveLlmHybridResult maps unsupported LLM output to create_failed", () => {
   assert.deepEqual(resolveLlmHybridResult(null), {
     type: "help",

@@ -8,6 +8,8 @@ export function resolveLlmHybridResult(
   if (
     llmCommand?.type === "create" ||
     llmCommand?.type === "createRecurring" ||
+    llmCommand?.type === "collectTimeForCreate" ||
+    llmCommand?.type === "collectTimeForRecurring" ||
     llmCommand?.type === "confirmAmbiguousCreate"
   ) {
     return llmCommand;

@@ -45,6 +45,7 @@ export interface CreateReminderDraft {
   dayOfMonth?: number;
   remindAt?: string;
   time?: string;
+  message?: string;
   ambiguousMessage?: string;
   ambiguousOnceRemindAt?: string;
   ambiguousRecurrenceType?: "daily" | "weekly" | "monthly";

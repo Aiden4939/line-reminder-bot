@@ -22,6 +22,7 @@ import {
   handleWizardPostback,
   handleWizardText,
   startWizard,
+  startTimePicker,
 } from "./createReminderWizard.js";
 import {
   buildReminderListFlex,
@@ -324,6 +325,26 @@ async function executeCommand(
       });
 
       await replyCreateSuccess(context.replyToken, reminder);
+      return;
+    }
+
+    case "collectTimeForCreate": {
+      await startTimePicker(context, {
+        kind: "once",
+        remindAt: command.remindDate,
+        message: command.message,
+      });
+      return;
+    }
+
+    case "collectTimeForRecurring": {
+      await startTimePicker(context, {
+        kind: "recurring",
+        recurrenceType: command.recurrenceType,
+        weekday: command.weekday,
+        dayOfMonth: command.dayOfMonth,
+        message: command.message,
+      });
       return;
     }
 

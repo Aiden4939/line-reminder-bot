@@ -207,7 +207,7 @@ function buildTimeFlex(): FlexMessage {
         contents: [
           {
             type: "text",
-            text: "重複提醒",
+            text: "提醒時間",
             weight: "bold",
             size: "lg",
           },
@@ -381,6 +381,20 @@ export async function startWizard(context: MessageContext): Promise<void> {
     {}
   );
   await replyStep(context.replyToken, "chooseKind");
+}
+
+export async function startTimePicker(
+  context: MessageContext,
+  draft: CreateReminderDraft
+): Promise<void> {
+  await conversationSessionRepository.upsertSession(
+    context.sourceType,
+    context.sourceId,
+    context.userId,
+    "pickTime",
+    draft
+  );
+  await replyStep(context.replyToken, "pickTime");
 }
 
 function parseDatetimePickerValue(value: string): Date | null {
@@ -734,6 +748,16 @@ export async function handleWizardPostback(
       return true;
     }
     draft.time = time;
+
+    if (draft.kind === "once" && draft.remindAt) {
+      draft.remindAt = `${draft.remindAt.slice(0, 10)}T${time}`;
+    }
+
+    if (draft.message) {
+      await finalizeWizard(context, draft, draft.message);
+      return true;
+    }
+
     await conversationSessionRepository.upsertSession(
       context.sourceType,
       context.sourceId,
