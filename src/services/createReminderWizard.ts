@@ -19,6 +19,7 @@ import {
 } from "../utils/recurrence.js";
 import { resolveQuickPickDatetime, replyCreateSuccess } from "./editReminderTime.js";
 import * as lineService from "./lineService.js";
+import type { LineMessage } from "./lineService.js";
 
 type FlexMessage = messagingApi.FlexMessage;
 type QuickReply = messagingApi.QuickReply;
@@ -394,7 +395,21 @@ export async function startTimePicker(
     "pickTime",
     draft
   );
-  await replyStep(context.replyToken, "pickTime");
+
+  const messages: LineMessage[] = [buildTimeFlex()];
+  if (draft.kind === "once" && draft.remindAt) {
+    messages.push({
+      type: "text",
+      text: `已解析日期：${draft.remindAt.slice(0, 10)}，請選擇幾點幾分。`,
+    });
+  } else if (draft.kind === "recurring") {
+    messages.push({
+      type: "text",
+      text: "請選擇重複提醒的時間。",
+    });
+  }
+
+  await lineService.replyMessages(context.replyToken, messages);
 }
 
 function parseDatetimePickerValue(value: string): Date | null {

@@ -80,6 +80,11 @@ function parseRemindDate(payload: LlmReminderPayload): string | null {
   return match?.[1] ?? null;
 }
 
+function isDateOnlyRemindAt(remindAt: string): boolean {
+  const raw = remindAt.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw);
+}
+
 function parseRecurringOption(payload: LlmReminderPayload): {
   recurrenceType: "daily" | "weekly" | "monthly";
   time: string;
@@ -204,8 +209,12 @@ export function mapLlmPayload(
     if (!message) {
       return { type: "help", reason: "missing_message" };
     }
-    if (payload.needs_time === true) {
-      const remindDate = parseRemindDate(payload);
+    const remindDate = parseRemindDate(payload);
+    const remindAtRaw = payload.remind_at?.trim();
+    if (
+      payload.needs_time === true ||
+      (remindAtRaw && isDateOnlyRemindAt(remindAtRaw))
+    ) {
       if (!remindDate) {
         return { type: "help", reason: "invalid_datetime_format" };
       }
@@ -310,10 +319,14 @@ export async function parseCommandWithLlm(
             "- 下週一/下禮拜一/這週五/明天/後天通常是一次性，除非語意明確表示每週重複",
             "- 一次性提醒如果有日期但沒有幾點幾分，不可猜時間；回 action=create, intent=create, needs_time=true, remind_at=YYYY-MM-DD, message=提醒內容",
             "- 重複提醒如果有頻率但沒有幾點幾分，不可猜時間；回 action=create_recurring, intent=create_recurring, needs_time=true, recurrence_type/weekday/day_of_month/message",
+            "- 句子同時出現多個時間時：以「提醒我」為分界；前面的時間才是 remind_at，後面的時間屬於 message 內容",
+            "- 9/5中午提醒我明天要吃飯 → action=create, message=明天要吃飯, remind_at=當年9/5 12:00（不可把 message 裡的「明天」當 remind_at）",
+            "- 8/20早上9點提醒我9/1要交報告 → action=create, message=9/1要交報告, remind_at=當年8/20 09:00",
             "- 使用者文字含「提醒我」時，「提醒我」後面的文字通常就是 message，必須盡量原樣保留",
             "- message 可以用數字、標點、序號開頭，例如「4.要上課」；不可因為像清單編號就丟棄或改寫",
             "- 時間詞後的數字加句點可能表示「點」，例如「下午3.提醒我...」應理解為「下午3點提醒我...」",
             "- 明天早上九點開會 → action=create, message=開會, remind_at=推算後的 YYYY-MM-DD HH:mm",
+            "- 明天提醒我要吃飯 → action=create, intent=create, needs_time=true, remind_at=推算後的明天 YYYY-MM-DD, message=吃飯",
             "- 下個禮拜四下午3.提醒我4.要上課 → action=create, message=4.要上課, remind_at=推算後的下個禮拜四 15:00",
             "- 下禮拜一提醒我要測試 → action=create, intent=create, needs_time=true, remind_at=推算後的下禮拜一 YYYY-MM-DD, message=測試",
             "- 每個禮拜一提醒我要測試 → action=create_recurring, intent=create_recurring, needs_time=true, recurrence_type=weekly, weekday=1, message=測試",

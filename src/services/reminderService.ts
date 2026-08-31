@@ -149,6 +149,16 @@ async function handleAmbiguousChoice(
   const recurrenceType = draft.ambiguousRecurrenceType;
   const recurrenceTime = draft.ambiguousRecurrenceTime;
   if (!recurrenceType || !recurrenceTime) {
+    if (recurrenceType) {
+      await startTimePicker(context, {
+        kind: "recurring",
+        recurrenceType,
+        weekday: draft.ambiguousRecurrenceWeekday,
+        dayOfMonth: draft.ambiguousRecurrenceDayOfMonth,
+        message,
+      });
+      return true;
+    }
     await lineService.replyMessage(
       context.replyToken,
       "這則提醒目前無法直接建立重複提醒，請改寫成例如「每週一 09:00 提醒我 ...」。"

@@ -72,6 +72,33 @@ test("mapLlmPayload collects time for one-shot reminder with date only", () => {
   );
 });
 
+test("mapLlmPayload collects time when remind_at is date-only without needs_time", () => {
+  assert.deepEqual(
+    mapLlmPayload({
+      action: "create",
+      remind_at: "2026-06-29",
+      message: "吃飯",
+    }),
+    {
+      type: "collectTimeForCreate",
+      remindDate: "2026-06-29",
+      message: "吃飯",
+    }
+  );
+});
+
+test("mapLlmPayload uses remind_at before 提醒我 for dual-time sentences", () => {
+  const result = mapLlmPayload({
+    action: "create",
+    message: "明天要吃飯",
+    remind_at: "2026-09-05 12:00",
+  });
+  assert.equal(result?.type, "create");
+  if (result?.type === "create") {
+    assert.equal(result.message, "明天要吃飯");
+  }
+});
+
 test("mapLlmPayload rejects non-create actions", () => {
   assert.equal(mapLlmPayload({ action: "list" }), null);
   assert.equal(mapLlmPayload({ action: "cancel", cancel_id: 1 }), null);
